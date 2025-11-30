@@ -22,13 +22,53 @@ public class ProductsController : ControllerBase
         return Ok(products);
     }
 
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ProductResponseDto>> GetById(Guid id)
+    {
+        var product = await _service.GetByIdAsync(id);
+        if (product == null) returnTZNotFound();
+        return Ok(product);
+    }
+
     [HttpPost]
-    // [Authorize(Roles = "Admin")] // Descomentar quando implementar Auth
+    // [Authorize(Roles = "Admin")] // Descomentar futuramente
     public async Task<ActionResult<ProductResponseDto>> Create([FromBody] CreateProductDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
         var result = await _service.CreateAsync(dto);
         return CreatedAtAction(nameof(GetAll), new { id = result.Id }, result);
+    }
+
+    [HttpPut("{id}")]
+    // [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> Update(Guid id, [FromBody] CreateProductDto dto)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        try
+        {
+            await _service.UpdateAsync(id, dto);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    [HttpDelete("{id}")]
+    // [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> Delete(Guid id)
+    {
+        try
+        {
+            await _service.DeleteAsync(id);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 }

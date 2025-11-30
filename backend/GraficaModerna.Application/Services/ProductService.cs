@@ -31,12 +31,30 @@ public class ProductService : IProductService
 
     public async Task<ProductResponseDto> CreateAsync(CreateProductDto dto)
     {
-        // O AutoMapper aqui converteria DTO -> Entity, mas como temos validação no construtor
-        // é mais seguro instanciar explicitamente para garantir o domínio rico.
         var product = new Product(dto.Name, dto.Description, dto.Price, dto.ImageUrl);
-
         var created = await _repository.CreateAsync(product);
-
         return _mapper.Map<ProductResponseDto>(created);
+    }
+
+    public async Task UpdateAsync(Guid id, CreateProductDto dto)
+    {
+        var product = await _repository.GetByIdAsync(id);
+        if (product == null) throw new KeyNotFoundException("Produto não encontrado");
+
+        // Atualiza a entidade usando o método de domínio
+        product.Update(dto.Name, dto.Description, dto.Price, dto.ImageUrl);
+
+        await _repository.UpdateAsync(product);
+    }
+
+    public async Task DeleteAsync(Guid id)
+    {
+        var product = await _repository.GetByIdAsync(id);
+        if (product == null) throw new KeyNotFoundException("Produto não encontrado");
+
+        // Soft Delete (apenas desativa)
+        product.Deactivate();
+
+        await _repository.UpdateAsync(product);
     }
 }
