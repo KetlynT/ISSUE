@@ -1,7 +1,8 @@
+using GraficaModerna.API.Data;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Application.Mappings;
 using GraficaModerna.Application.Services;
-using GraficaModerna.Application.Validators;
+// using GraficaModerna.Application.Validators; // Se não tiver criado o validador ainda, comente esta linha
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Domain.Interfaces;
 using GraficaModerna.Infrastructure.Context;
@@ -14,33 +15,21 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using GraficaModerna.API.Data;
 
-var app = builder.Build();
-
-// ==========================================
-// SEEDER DE BANCO DE DADOS (Executa ao iniciar)
-// ==========================================
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRef<AppDbContext>();
-    await DbSeeder.SeedAsync(context);
-}
-
+// 1. CRIA O BUILDER PRIMEIRO
 var builder = WebApplication.CreateBuilder(args);
 
 // ==========================================
-// 1. CONFIGURAÇÃO DE BANCO DE DADOS (POSTGRES)
+// CONFIGURAÇÃO DE SERVIÇOS (DI)
 // ==========================================
+
+// Banco de Dados
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ==========================================
-// 2. IDENTITY (USUÁRIOS E ROLES)
-// ==========================================
+// Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    // Configurações de senha para DEV (pode deixar mais rígido em PROD)
     options.Password.RequireDigit = false;
     options.Password.RequireLowercase = false;
     options.Password.RequireNonAlphanumeric = false;
@@ -50,11 +39,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// ==========================================
-// 3. AUTENTICAÇÃO JWT
-// ==========================================
+// Autenticação JWT
 var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -76,31 +62,23 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// ==========================================
-// 4. INJEÇÃO DE DEPENDÊNCIA (DI)
-// ==========================================
-// Application
+// Injeção de Dependência
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-
-// Infrastructure
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 
 // Ferramentas
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
-builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
+// Comente a linha abaixo se você ainda não criou a classe CreateProductValidator
+// builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 
-// ==========================================
-// 5. API E SWAGGER (COM SUPORTE A JWT)
-// ==========================================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+// Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica A Moderna API", Version = "v1" });
-
-    // Configuração para aparecer o cadeado no Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Insira o token JWT desta maneira: Bearer {seu token}",
@@ -109,7 +87,6 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement()
     {
         {
@@ -129,41 +106,46 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// ==========================================
-// 6. CORS (PERMITIR FRONTEND)
-// ==========================================
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
-        b => b.WithOrigins("http://localhost:5173") // URL do Vite
+        b => b.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
 
+// ==========================================
+// 2. CONSTRÓI O APP (SOMENTE AQUI)
+// ==========================================
 var app = builder.Build();
 
 // ==========================================
-// PIPELINE DE EXECUÇÃO (MIDDLEWARES)
+// SEEDER DE BANCO DE DADOS
+// ==========================================
+using (var scope = app.Services.CreateScope())
+{
+    // CORRIGIDO: GetRef não existe, o correto é GetRequiredService
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DbSeeder.SeedAsync(context);
+}
+
+// ==========================================
+// PIPELINE DE EXECUÇÃO
 // ==========================================
 
-// Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Arquivos Estáticos (Imagens)
 app.UseStaticFiles();
-
-// CORS
 app.UseCors("AllowFrontend");
 
-// Auth
-app.UseAuthentication(); // Quem é você?
-app.UseAuthorization();  // O que você pode fazer?
+app.UseAuthentication();
+app.UseAuthorization();
 
-// Controllers
 app.MapControllers();
 
 app.Run();
