@@ -28,39 +28,62 @@ public static class DbSeeder
             await userManager.CreateAsync(newAdmin, "Admin@123");
         }
 
-        // 2. Seed Settings
-        if (!context.SiteSettings.Any())
+        // 2. Seed Settings (Lógica Corrigida: Verifica chave por chave)
+        var defaultSettings = new List<SiteSetting>
         {
-            context.SiteSettings.AddRange(
-                // Contato
-                new SiteSetting("whatsapp_number", "5511999999999"),
-                new SiteSetting("whatsapp_display", "(11) 99999-9999"),
-                new SiteSetting("contact_email", "contato@graficamoderna.com.br"),
-                new SiteSetting("address", "Av. Paulista, 1000 - São Paulo, SP"),
+            // Identidade Visual
+            new SiteSetting("site_logo", "https://placehold.co/100x100/2563EB/ffffff?text=GM"), 
+            new SiteSetting("hero_bg_url", "https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?q=80&w=1932"),
 
-                // Home - Hero
-                new SiteSetting("hero_badge", "🚀 A melhor gráfica da região"),
-                new SiteSetting("hero_title", "Imprima suas ideias com perfeição."),
-                new SiteSetting("hero_subtitle", "Cartões de visita, banners e materiais promocionais com entrega rápida e qualidade premium."),
+            // Contato
+            new SiteSetting("whatsapp_number", "5511999999999"),
+            new SiteSetting("whatsapp_display", "(11) 99999-9999"),
+            new SiteSetting("contact_email", "contato@graficamoderna.com.br"),
+            new SiteSetting("address", "Av. Paulista, 1000 - São Paulo, SP"),
 
-                // Home - Produtos
-                new SiteSetting("home_products_title", "Nossos Produtos"),
-                new SiteSetting("home_products_subtitle", "Explore as opções disponíveis para o seu negócio e solicite um orçamento.")
-            );
+            // Home - Hero
+            new SiteSetting("hero_badge", "🚀 A melhor gráfica da região"),
+            new SiteSetting("hero_title", "Imprima suas ideias com perfeição."),
+            new SiteSetting("hero_subtitle", "Cartões de visita, banners e materiais promocionais com entrega rápida e qualidade premium."),
+
+            // Home - Produtos
+            new SiteSetting("home_products_title", "Nossos Produtos"),
+            new SiteSetting("home_products_subtitle", "Explore as opções disponíveis para o seu negócio e solicite um orçamento.")
+        };
+
+        foreach (var setting in defaultSettings)
+        {
+            // Se a configuração NÃO existir no banco, adiciona ela
+            if (!context.SiteSettings.Any(s => s.Key == setting.Key))
+            {
+                context.SiteSettings.Add(setting);
+            }
         }
+        
+        // Salva as configurações novas se houver alguma
+        await context.SaveChangesAsync();
 
         // 3. Seed Pages (Páginas de Conteúdo)
-        if (!context.ContentPages.Any())
+        // Mesma lógica: verifica se a página já existe pelo Slug
+        var defaultPages = new List<ContentPage>
         {
-            context.ContentPages.AddRange(
-                new ContentPage("sobre-nos", "Sobre a Gráfica A Moderna",
-                    "<h2>Nossa História</h2><p>Desde 2024 entregando qualidade e excelência em impressão para empresas e particulares. Nossa missão é transformar suas ideias em realidade tangível.</p><h3>Nossos Valores</h3><ul><li>Qualidade Premium</li><li>Entrega Rápida</li><li>Sustentabilidade</li></ul>"),
-                new ContentPage("politica-privacidade", "Política de Privacidade",
-                    "<p>Nós valorizamos seus dados. Esta política descreve como coletamos, usamos e protegemos suas informações pessoais ao utilizar nossos serviços.</p>")
-            );
-        }
+            new ContentPage("sobre-nos", "Sobre a Gráfica A Moderna",
+                "<h2>Nossa História</h2><p>Desde 2024 entregando qualidade e excelência em impressão para empresas e particulares. Nossa missão é transformar suas ideias em realidade tangível.</p><h3>Nossos Valores</h3><ul><li>Qualidade Premium</li><li>Entrega Rápida</li><li>Sustentabilidade</li></ul>"),
+            new ContentPage("politica-privacidade", "Política de Privacidade",
+                "<p>Nós valorizamos seus dados. Esta política descreve como coletamos, usamos e protegemos suas informações pessoais ao utilizar nossos serviços.</p>")
+        };
 
-        // 4. Seed Products (DADOS FICTÍCIOS PARA TESTE)
+        foreach (var page in defaultPages)
+        {
+            if (!context.ContentPages.Any(p => p.Slug == page.Slug))
+            {
+                context.ContentPages.Add(page);
+            }
+        }
+        
+        await context.SaveChangesAsync();
+
+        // 4. Seed Products
         if (!context.Products.Any())
         {
             context.Products.AddRange(
@@ -101,8 +124,7 @@ public static class DbSeeder
                     "https://images.unsplash.com/photo-1563986768609-322da13575f3?q=80&w=1470&auto=format&fit=crop"
                 )
             );
+            await context.SaveChangesAsync();
         }
-
-        await context.SaveChangesAsync();
     }
 }

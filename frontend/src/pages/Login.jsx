@@ -6,15 +6,22 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+    
     try {
       await AuthService.login(email, password);
-      navigate('/admin'); // Redireciona para o painel
+      // ATUALIZADO: Redireciona para a nova rota secreta
+      navigate('/painel-restrito-gerencial'); 
     } catch (err) {
       setError('Login falhou. Verifique suas credenciais.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -48,11 +55,15 @@ export const Login = () => {
           </div>
           <button 
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded transition-colors"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-2 rounded transition-colors flex justify-center"
           >
-            Entrar
+            {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
+        <div className="mt-4 text-center">
+            <a href="/" className="text-sm text-gray-500 hover:text-blue-600">← Voltar para o site</a>
+        </div>
       </div>
     </div>
   );
