@@ -12,4 +12,10 @@ public class SiteSetting
         Key = key;
         Value = value;
     }
+
+    // Método para atualizar o valor
+    public void UpdateValue(string value)
+    {
+        Value = value;
+    }
 }

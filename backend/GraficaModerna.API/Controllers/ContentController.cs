@@ -1,5 +1,7 @@
 ﻿using GraficaModerna.Domain.Entities;
 using GraficaModerna.Infrastructure.Context;
+using Ganss.Xss; // Importar Sanitizador
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,13 +12,20 @@ namespace GraficaModerna.API.Controllers;
 public class ContentController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IHtmlSanitizer _sanitizer; // Injetar Sanitizador
 
-    public ContentController(AppDbContext context)
+    public ContentController(AppDbContext context, IHtmlSanitizer sanitizer)
     {
         _context = context;
+        _sanitizer = sanitizer;
     }
 
-    // GET: api/content/pages/sobre-nos
+    [HttpGet("pages")]
+    public async Task<IActionResult> GetAllPages()
+    {
+        return Ok(await _context.ContentPages.Select(p => new { p.Id, p.Slug, p.Title }).ToListAsync());
+    }
+
     [HttpGet("pages/{slug}")]
     public async Task<IActionResult> GetPage(string slug)
     {
@@ -25,13 +34,55 @@ public class ContentController : ControllerBase
         return Ok(page);
     }
 
-    // GET: api/content/settings
+    [HttpPut("pages/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdatePage(Guid id, [FromBody] ContentPage model)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var page = await _context.ContentPages.FindAsync(id);
+        if (page == null) return NotFound();
+
+        page.Title = model.Title;
+        // SEGURANÇA: Limpa scripts maliciosos do HTML antes de salvar
+        page.Content = _sanitizer.Sanitize(model.Content);
+
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpGet("settings")]
     public async Task<IActionResult> GetSettings()
     {
         var settings = await _context.SiteSettings.ToListAsync();
-        // Transforma lista em dicionário para fácil acesso no front: { "whatsapp": "...", "email": "..." }
         var dictionary = settings.ToDictionary(s => s.Key, s => s.Value);
         return Ok(dictionary);
+    }
+
+    [HttpPost("settings")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateSettings([FromBody] Dictionary<string, string> newSettings)
+    {
+        var dbSettings = await _context.SiteSettings.ToListAsync();
+
+        foreach (var kvp in newSettings)
+        {
+            var setting = dbSettings.FirstOrDefault(s => s.Key == kvp.Key);
+
+            // Simples sanitização para configurações de texto também (opcional, mas recomendado)
+            var cleanValue = kvp.Value;
+
+            if (setting != null)
+            {
+                setting.UpdateValue(cleanValue);
+            }
+            else
+            {
+                _context.SiteSettings.Add(new SiteSetting(kvp.Key, cleanValue));
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok();
     }
 }

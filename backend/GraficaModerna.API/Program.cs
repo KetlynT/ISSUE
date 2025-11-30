@@ -1,13 +1,14 @@
 using GraficaModerna.API.Data;
+using GraficaModerna.API.Middlewares; // Novo Middleware
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Application.Mappings;
 using GraficaModerna.Application.Services;
-using GraficaModerna.Application.Validators; // Certifique-se de que este namespace existe
+using GraficaModerna.Application.Validators;
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Domain.Interfaces;
 using GraficaModerna.Infrastructure.Context;
 using GraficaModerna.Infrastructure.Repositories;
-using GraficaModerna.Infrastructure.Services; // Namespace onde criamos o LocalFileStorageService
+using GraficaModerna.Infrastructure.Services;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Ganss.Xss; // Novo Sanitizador
 
 // 1. CRIA O BUILDER
 var builder = WebApplication.CreateBuilder(args);
@@ -72,14 +74,18 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Repositórios
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 
-// Serviços de Infraestrutura (NOVO)
+// Serviços de Infraestrutura
 builder.Services.AddHttpContextAccessor(); // Necessário para gerar URLs absolutas
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+
+// Segurança: Sanitizador HTML (Singleton é suficiente para este serviço)
+builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
 
 // Ferramentas
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 
 // Validação (FluentValidation)
+// Isso registra todos os validadores no assembly, incluindo CreateProductValidator e ContentPageValidator
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
 
@@ -131,6 +137,9 @@ builder.Services.AddCors(options =>
 // ==========================================
 var app = builder.Build();
 
+// SEGURANÇA: Middleware de Exceção Global (Deve ser o primeiro ou um dos primeiros)
+app.UseMiddleware<ExceptionMiddleware>();
+
 // ==========================================
 // SEEDER DE BANCO DE DADOS (Inicialização)
 // ==========================================
@@ -140,9 +149,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>(); // Injetamos o UserManager
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
-        // Chamada atualizada com UserManager para criar o Admin
         await DbSeeder.SeedAsync(context, userManager);
     }
     catch (Exception ex)

@@ -1,33 +1,47 @@
 import React, { useEffect, useState } from 'react';
 import { ProductService } from '../services/productService';
+import { ContentService } from '../services/contentService';
 import { ProductCard } from '../components/ProductCard';
 import { Button } from '../components/ui/Button';
-import { Search, ArrowRight, Printer } from 'lucide-react';
+import { Search, Printer } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const Home = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  const [settings, setSettings] = useState({
+    hero_badge: '🚀 A melhor gráfica da região',
+    hero_title: 'Imprima suas ideias com perfeição.',
+    hero_subtitle: 'Cartões de visita, banners e materiais promocionais com entrega rápida e qualidade premium.',
+    whatsapp_number: '5511999999999',
+    hero_bg_url: 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?q=80&w=1932' // Valor padrão se não houver no banco
+  });
 
   useEffect(() => {
-    loadCatalog();
+    const loadData = async () => {
+      try {
+        const [prods, serverSettings] = await Promise.all([
+           ProductService.getAll(),
+           ContentService.getSettings()
+        ]);
+        setProducts(prods);
+        if (serverSettings) {
+            setSettings(prev => ({...prev, ...serverSettings}));
+        }
+      } catch (error) {
+        console.error("Erro dados:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, []);
-
-  const loadCatalog = async () => {
-    try {
-      const data = await ProductService.getAll();
-      setProducts(data);
-    } catch (error) {
-      console.error("Erro API:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleQuoteRedirect = (product) => {
     const message = `Olá! Gostaria de cotar: *${product.name}*.`;
-    window.open(`https://wa.me/5511999999999?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const filteredProducts = products.filter(p => 
@@ -36,30 +50,40 @@ export const Home = () => {
 
   return (
     <>
-      {/* Hero Section Moderno */}
-      <div className="relative bg-blue-900 text-white overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?q=80&w=1932&auto=format&fit=crop')] bg-cover bg-center opacity-20"></div>
+      {/* Hero Section com Background Dinâmico */}
+      <div className="relative bg-blue-900 text-white overflow-hidden transition-all duration-500">
+        {/* Camada de Imagem com Fallback */}
+        <div 
+            className="absolute inset-0 bg-cover bg-center opacity-20 transform scale-105"
+            style={{ 
+                backgroundImage: `url('${settings.hero_bg_url || 'https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?q=80&w=1932'}')` 
+            }}
+        ></div>
+        
         <div className="relative max-w-7xl mx-auto px-4 py-24 sm:px-6 lg:px-8 flex flex-col items-center text-center">
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <span className="inline-block py-1 px-3 rounded-full bg-blue-800/50 border border-blue-700 text-blue-200 text-sm font-semibold mb-6">
-              🚀 A melhor gráfica da região
+            <span className="inline-block py-1 px-3 rounded-full bg-blue-800/50 border border-blue-700 text-blue-200 text-sm font-semibold mb-6 backdrop-blur-sm">
+              {settings.hero_badge}
             </span>
-            <h2 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight">
-              Imprima suas ideias <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">com perfeição.</span>
+            <h2 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight drop-shadow-lg">
+              {settings.hero_title}
             </h2>
-            <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
-              Cartões de visita, banners e materiais promocionais com entrega rápida e qualidade premium.
+            <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto drop-shadow-md">
+              {settings.hero_subtitle}
             </p>
             <div className="flex gap-4 justify-center">
-              <Button variant="success" className="rounded-full px-8 py-4 text-lg" onClick={() => document.getElementById('catalogo').scrollIntoView({behavior: 'smooth'})}>
+              <Button variant="success" className="rounded-full px-8 py-4 text-lg shadow-xl shadow-green-900/20" onClick={() => document.getElementById('catalogo').scrollIntoView({behavior: 'smooth'})}>
                 Ver Catálogo
               </Button>
-              <Button variant="outline" className="rounded-full px-8 py-4 text-lg">
+              <Button 
+                variant="outline" 
+                className="rounded-full px-8 py-4 text-lg backdrop-blur-sm hover:bg-white/10"
+                onClick={() => window.open(`https://wa.me/${settings.whatsapp_number}`, '_blank')}
+              >
                 Falar com Consultor
               </Button>
             </div>
@@ -67,7 +91,6 @@ export const Home = () => {
         </div>
       </div>
 
-      {/* Catálogo Section */}
       <section id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
           <div>
@@ -93,7 +116,6 @@ export const Home = () => {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[1,2,3,4].map(i => (
-              // CORREÇÃO AQUI: Removido 'bg-white', mantido apenas 'bg-gray-200' para o skeleton
               <div key={i} className="bg-gray-200 h-96 rounded-2xl shadow-sm animate-pulse"></div>
             ))}
           </div>
