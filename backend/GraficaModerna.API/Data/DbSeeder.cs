@@ -1,16 +1,35 @@
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Infrastructure.Context;
+using Microsoft.AspNetCore.Identity;
 
 namespace GraficaModerna.API.Data;
 
 public static class DbSeeder
 {
-    public static async Task SeedAsync(AppDbContext context)
+    // Adicione UserManager ao método
+    public static async Task SeedAsync(AppDbContext context, UserManager<ApplicationUser> userManager)
     {
-        // Garante que o banco existe
         await context.Database.EnsureCreatedAsync();
 
-        // Seed Settings
+        // 1. Seed Usuário Admin (CRUCIAL)
+        var adminEmail = "admin@graficamoderna.com";
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+
+        if (adminUser == null)
+        {
+            var newAdmin = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                FullName = "Administrador Sistema",
+                EmailConfirmed = true
+            };
+
+            // Senha forte padrão (altere no primeiro login)
+            await userManager.CreateAsync(newAdmin, "Admin@123");
+        }
+
+        // 2. Seed Settings
         if (!context.SiteSettings.Any())
         {
             context.SiteSettings.AddRange(
@@ -21,15 +40,14 @@ public static class DbSeeder
             );
         }
 
-        // Seed Pages
+        // 3. Seed Pages
         if (!context.ContentPages.Any())
         {
             context.ContentPages.AddRange(
                 new ContentPage("sobre-nos", "Sobre a Gráfica A Moderna",
-                    "<p>Fundada em 2024, a <strong>Gráfica A Moderna</strong> nasceu com a missão de revolucionar o mercado de impressos.</p><p>Nossa tecnologia de ponta garante cores vibrantes e acabamento impecável.</p>"),
-
+                    "<p>Desde 2024 entregando qualidade...</p>"),
                 new ContentPage("politica-privacidade", "Política de Privacidade",
-                    "<p>Nós valorizamos seus dados. Esta política descreve como coletamos e protegemos suas informações...</p>")
+                    "<p>Seus dados estão seguros...</p>")
             );
         }
 

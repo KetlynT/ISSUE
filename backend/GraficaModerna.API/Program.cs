@@ -2,11 +2,12 @@ using GraficaModerna.API.Data;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Application.Mappings;
 using GraficaModerna.Application.Services;
-// using GraficaModerna.Application.Validators; // Se não tiver criado o validador ainda, comente esta linha
+using GraficaModerna.Application.Validators; // Certifique-se de que este namespace existe
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Domain.Interfaces;
 using GraficaModerna.Infrastructure.Context;
 using GraficaModerna.Infrastructure.Repositories;
+using GraficaModerna.Infrastructure.Services; // Namespace onde criamos o LocalFileStorageService
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,7 +17,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
-// 1. CRIA O BUILDER PRIMEIRO
+// 1. CRIA O BUILDER
 var builder = WebApplication.CreateBuilder(args);
 
 // ==========================================
@@ -27,7 +28,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Identity
+// Identity (Autenticação e Usuários)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = false;
@@ -62,20 +63,30 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Injeção de Dependência
+// --- Injeção de Dependência ---
+
+// Serviços de Domínio/Aplicação
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Repositórios
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
+
+// Serviços de Infraestrutura (NOVO)
+builder.Services.AddHttpContextAccessor(); // Necessário para gerar URLs absolutas
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 
 // Ferramentas
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
-// Comente a linha abaixo se você ainda não criou a classe CreateProductValidator
-// builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
+
+// Validação (FluentValidation)
+builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
+builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Swagger
+// Swagger Configurado com Suporte a JWT
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica A Moderna API", Version = "v1" });
@@ -106,7 +117,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS
+// CORS (Permitir Frontend)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
@@ -116,18 +127,29 @@ builder.Services.AddCors(options =>
 });
 
 // ==========================================
-// 2. CONSTRÓI O APP (SOMENTE AQUI)
+// 2. CONSTRÓI O APP
 // ==========================================
 var app = builder.Build();
 
 // ==========================================
-// SEEDER DE BANCO DE DADOS
+// SEEDER DE BANCO DE DADOS (Inicialização)
 // ==========================================
 using (var scope = app.Services.CreateScope())
 {
-    // CORRIGIDO: GetRef não existe, o correto é GetRequiredService
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await DbSeeder.SeedAsync(context);
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>(); // Injetamos o UserManager
+
+        // Chamada atualizada com UserManager para criar o Admin
+        await DbSeeder.SeedAsync(context, userManager);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Um erro ocorreu ao popular o banco de dados.");
+    }
 }
 
 // ==========================================
@@ -140,11 +162,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseStaticFiles();
+app.UseStaticFiles(); // Importante para servir as imagens
 app.UseCors("AllowFrontend");
 
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseAuthentication(); // Quem é você?
+app.UseAuthorization();  // O que você pode fazer?
 
 app.MapControllers();
 

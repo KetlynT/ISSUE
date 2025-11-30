@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ContentService } from '../services/contentService';
 import { motion } from 'framer-motion';
+import DOMPurify from 'dompurify';
 
 export const GenericPage = () => {
   const { slug } = useParams();
@@ -41,6 +42,10 @@ export const GenericPage = () => {
       <div 
         className="prose prose-lg prose-blue text-gray-600 max-w-none"
         dangerouslySetInnerHTML={{ __html: page.content }} 
+      />
+      <div 
+        className="prose prose-lg prose-blue text-gray-600 max-w-none"
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }} 
       />
     </motion.div>
   );

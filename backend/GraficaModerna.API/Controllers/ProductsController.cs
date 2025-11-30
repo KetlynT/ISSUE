@@ -31,7 +31,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost]
-    // [Authorize(Roles = "Admin")] // Descomentar futuramente
+    [Authorize(Roles = "Admin")] // Descomentar futuramente
     public async Task<ActionResult<ProductResponseDto>> Create([FromBody] CreateProductDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -41,7 +41,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    // [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Update(Guid id, [FromBody] CreateProductDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -58,7 +58,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    // [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Delete(Guid id)
     {
         try

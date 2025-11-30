@@ -7,7 +7,8 @@ import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { ProductDetails } from './pages/ProductDetails';
-import { GenericPage } from './pages/GenericPage'; // Nova página
+import { GenericPage } from './pages/GenericPage';
+import { Contact } from './pages/Contact'; // <--- IMPORT NOVO
 import { AuthService } from './services/authService';
 
 const PrivateRoute = ({ children }) => {
@@ -21,9 +22,10 @@ function App() {
       <Routes>
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/contato" element={<Contact />} /> {/* <--- ROTA NOVA */}
           <Route path="/produto/:id" element={<ProductDetails />} />
           
-          {/* Rota Dinâmica para páginas de conteúdo (Sobre, Política, etc) */}
+          {/* Rota Dinâmica para páginas de conteúdo */}
           <Route path="/pagina/:slug" element={<GenericPage />} />
         </Route>
 
@@ -38,8 +40,6 @@ function App() {
           } 
         />
 
-        {/* REDIRECIONAMENTO AUTOMÁTICO 404 -> HOME */}
-        {/* Se tentar acessar qualquer rota não definida acima, vai para a Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

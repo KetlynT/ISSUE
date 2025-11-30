@@ -93,7 +93,8 @@ export const Home = () => {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[1,2,3,4].map(i => (
-              <div key={i} className="bg-white h-96 rounded-2xl shadow-sm animate-pulse bg-gray-200"></div>
+              // CORREÇÃO AQUI: Removido 'bg-white', mantido apenas 'bg-gray-200' para o skeleton
+              <div key={i} className="bg-gray-200 h-96 rounded-2xl shadow-sm animate-pulse"></div>
             ))}
           </div>
         ) : filteredProducts.length > 0 ? (

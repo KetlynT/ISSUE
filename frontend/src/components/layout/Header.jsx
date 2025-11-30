@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { User, ShoppingBag } from 'lucide-react';
+import { User, MessageSquare } from 'lucide-react'; // Adicionei MessageSquare para o ícone
 
 export const Header = () => {
   return (
@@ -19,12 +19,16 @@ export const Header = () => {
         
         {/* Navegação */}
         <nav className="flex items-center gap-6">
+          {/* Link Fale Conosco NOVO */}
+          <Link to="/contato" className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium">
+            <MessageSquare size={20} />
+            <span className="hidden sm:inline">Fale Conosco</span>
+          </Link>
+
           <Link to="/admin" className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium">
             <User size={20} />
             <span className="hidden sm:inline">Área Admin</span>
           </Link>
-          {/* Espaço para futuro carrinho */}
-          {/* <button className="text-gray-500 hover:text-blue-600"><ShoppingBag size={20}/></button> */}
         </nav>
       </div>
     </header>
