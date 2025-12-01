@@ -24,6 +24,21 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- SEGURANÇA: Carregamento de Segredos via Variáveis de Ambiente ---
+// Tenta ler do ambiente primeiro; se não existir, lê do appsettings (apenas para dev local se configurado)
+var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY") ?? builder.Configuration["Jwt:Key"];
+var melhorEnvioToken = Environment.GetEnvironmentVariable("MELHORENVIO_TOKEN") ?? builder.Configuration["MelhorEnvio:Token"];
+
+// Validação crítica: O sistema não deve iniciar se a segurança estiver comprometida
+if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
+{
+    throw new Exception("FATAL: A chave JWT (JWT_KEY) não está configurada ou é muito curta. Configure a variável de ambiente.");
+}
+
+// Injeta os valores seguros na configuração em memória
+builder.Configuration["Jwt:Key"] = jwtKey;
+builder.Configuration["MelhorEnvio:Token"] = melhorEnvioToken;
+
 // --- 1. Infraestrutura Web ---
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
@@ -42,9 +57,12 @@ builder.Services.AddResponseCompression(options =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(options => { options.Level = CompressionLevel.Fastest; });
 builder.Services.Configure<GzipCompressionProviderOptions>(options => { options.Level = CompressionLevel.SmallestSize; });
 
+// CONFIGURAÇÃO DE RATE LIMITING (Proteção contra ataques)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Limitador Global (Proteção DDoS genérica)
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -53,6 +71,19 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true,
                 PermitLimit = 300,
                 QueueLimit = 2,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // NOVA POLÍTICA: Estrita para Login/Cadastro (Proteção Brute-Force)
+    // Permite apenas 5 tentativas por minuto por IP
+    options.AddPolicy("AuthPolicy", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anon_auth",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 5,
+                QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));
 });
@@ -143,14 +174,14 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS - Atualizado para permitir origens específicas (produção e dev)
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
         b => b.WithOrigins(
                 "http://localhost:5173",
-                "http://localhost:3000", // Caso use outra porta
-                "https://aminhagrafica.com.br" // Domínio de produção
+                "http://localhost:3000",
+                "https://aminhagrafica.com.br"
               )
               .AllowAnyHeader()
               .AllowAnyMethod());
@@ -161,7 +192,7 @@ var app = builder.Build();
 // --- Pipeline ---
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseResponseCompression();
-app.UseRateLimiter();
+app.UseRateLimiter(); // Ativa o Rate Limiter
 
 // Seeding da Base de Dados
 using (var scope = app.Services.CreateScope())
@@ -171,11 +202,10 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<AppDbContext>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-        var config = services.GetRequiredService<IConfiguration>(); // Obter Configuração
+        var config = services.GetRequiredService<IConfiguration>();
 
         if (app.Environment.IsDevelopment())
         {
-            // Passa a configuração para o Seeder
             await DbSeeder.SeedAsync(context, userManager, config);
         }
     }

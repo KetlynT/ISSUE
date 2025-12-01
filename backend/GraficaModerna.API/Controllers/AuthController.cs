@@ -2,6 +2,7 @@ using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting; // Necessário para o atributo
 using System.Security.Claims;
 
 namespace GraficaModerna.API.Controllers;
@@ -17,22 +18,26 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    // APLICAÇÃO DA SEGURANÇA: Limita a 5 tentativas por minuto
+    [EnableRateLimiting("AuthPolicy")]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto dto)
     {
         return Ok(await _authService.RegisterAsync(dto));
     }
 
+    // APLICAÇÃO DA SEGURANÇA: Limita a 5 tentativas por minuto
+    [EnableRateLimiting("AuthPolicy")]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
     {
         return Ok(await _authService.LoginAsync(dto));
     }
 
-    // --- PERFIL DO CLIENTE ---
+    // --- PERFIL DO CLIENTE (Não precisa de limitação estrita, usa a global) ---
 
     [HttpGet("profile")]
-    [Authorize(Roles = "User")] // MUDANÇA: Apenas Clientes acessam dados de entrega
+    [Authorize(Roles = "User")]
     public async Task<ActionResult<UserProfileDto>> GetProfile()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -40,7 +45,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("profile")]
-    [Authorize(Roles = "User")] // MUDANÇA: Apenas Clientes atualizam dados de entrega
+    [Authorize(Roles = "User")]
     public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
