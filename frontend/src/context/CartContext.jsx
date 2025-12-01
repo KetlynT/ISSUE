@@ -10,7 +10,6 @@ export const CartProvider = ({ children }) => {
   const [cartTotal, setCartTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Atualiza o contador quando o app carrega ou usuário loga
   useEffect(() => {
     if (AuthService.isAuthenticated()) {
       fetchCartCount();
@@ -20,7 +19,6 @@ export const CartProvider = ({ children }) => {
   const fetchCartCount = async () => {
     try {
       const cart = await CartService.getCart();
-      // Soma a quantidade de todos os itens
       const count = cart.items.reduce((acc, item) => acc + item.quantity, 0);
       setCartCount(count);
       setCartTotal(cart.grandTotal);
@@ -32,7 +30,6 @@ export const CartProvider = ({ children }) => {
   const addToCart = async (productId, quantity = 1) => {
     if (!AuthService.isAuthenticated()) {
       toast.error("Faça login para adicionar ao carrinho");
-      // Opcional: Redirecionar para login
       return;
     }
 
@@ -40,16 +37,28 @@ export const CartProvider = ({ children }) => {
     try {
       await CartService.addItem(productId, quantity);
       toast.success("Produto adicionado!");
-      await fetchCartCount(); // Atualiza o contador
+      await fetchCartCount();
     } catch (error) {
-      toast.error("Erro ao adicionar produto");
+      toast.error(error.response?.data || "Erro ao adicionar produto");
     } finally {
       setLoading(false);
     }
   };
 
+  // NOVA FUNÇÃO
+  const updateQuantity = async (itemId, newQuantity) => {
+    try {
+        await CartService.updateQuantity(itemId, newQuantity);
+        await fetchCartCount(); // Atualiza contadores globais
+        return true;
+    } catch (error) {
+        toast.error(error.response?.data || "Erro ao atualizar quantidade");
+        return false;
+    }
+  };
+
   return (
-    <CartContext.Provider value={{ cartCount, cartTotal, addToCart, fetchCartCount, loading }}>
+    <CartContext.Provider value={{ cartCount, cartTotal, addToCart, updateQuantity, fetchCartCount, loading }}>
       {children}
     </CartContext.Provider>
   );

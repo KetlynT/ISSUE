@@ -11,6 +11,11 @@ export const CartService = {
     await api.post('/cart/items', { productId, quantity });
   },
 
+  // NOVA FUNÇÃO
+  updateQuantity: async (itemId, quantity) => {
+    await api.patch(`/cart/items/${itemId}`, { quantity });
+  },
+
   removeItem: async (itemId) => {
     await api.delete(`/cart/items/${itemId}`);
   },
@@ -20,14 +25,11 @@ export const CartService = {
   },
 
   // --- Cliente: Checkout & Pedidos ---
-  // A rota de checkout ainda está no CartController por conveniência de URL, mas usa OrderService no backend
   checkout: async (checkoutData) => {
-    // checkoutData espera: { address, zipCode, couponCode? }
     const response = await api.post('/cart/checkout', checkoutData);
     return response.data;
   },
   
-  // Alterado para chamar o endpoint correto de Orders
   getMyOrders: async () => {
     const response = await api.get('/orders');
     return response.data;
@@ -45,7 +47,6 @@ export const CartService = {
   },
 
   updateOrderStatus: async (orderId, newStatus) => {
-    // O backend espera uma string crua no body
     await api.patch(`/orders/${orderId}/status`, JSON.stringify(newStatus), {
         headers: { 'Content-Type': 'application/json' }
     });

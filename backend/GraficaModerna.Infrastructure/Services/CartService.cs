@@ -33,6 +33,8 @@ public class CartService : ICartService
     public async Task<CartDto> GetCartAsync(string userId)
     {
         var cart = await GetCartEntity(userId);
+
+        // Mapeamento manual incluindo dados de frete
         var itemsDto = cart.Items.Select(i => new CartItemDto(
             i.Id,
             i.ProductId,
@@ -40,7 +42,12 @@ public class CartService : ICartService
             i.Product?.ImageUrl ?? "",
             i.Product?.Price ?? 0,
             i.Quantity,
-            (i.Product?.Price ?? 0) * i.Quantity
+            (i.Product?.Price ?? 0) * i.Quantity,
+            // Dados para cálculo de frete
+            i.Product?.Weight ?? 0,
+            i.Product?.Width ?? 0,
+            i.Product?.Height ?? 0,
+            i.Product?.Length ?? 0
         )).ToList();
 
         return new CartDto(cart.Id, itemsDto, itemsDto.Sum(i => i.TotalPrice));
@@ -66,6 +73,29 @@ public class CartService : ICartService
         {
             cart.Items.Add(new CartItem { CartId = cart.Id, ProductId = dto.ProductId, Quantity = dto.Quantity });
         }
+        cart.LastUpdated = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
+
+    // NOVO: Atualiza a quantidade exata (usado pelos botões + e -)
+    public async Task UpdateItemQuantityAsync(string userId, Guid cartItemId, int quantity)
+    {
+        if (quantity <= 0)
+        {
+            await RemoveItemAsync(userId, cartItemId);
+            return;
+        }
+
+        var cart = await GetCartEntity(userId);
+        var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId);
+
+        if (item == null) throw new Exception("Item não encontrado no carrinho.");
+        if (item.Product == null) throw new Exception("Produto inválido.");
+
+        if (item.Product.StockQuantity < quantity)
+            throw new Exception($"Estoque insuficiente. Máximo disponível: {item.Product.StockQuantity}");
+
+        item.Quantity = quantity;
         cart.LastUpdated = DateTime.UtcNow;
         await _context.SaveChangesAsync();
     }

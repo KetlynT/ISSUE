@@ -8,8 +8,6 @@ namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-// MUDANÇA: Agora, toda a controller exige que o usuário seja 'User' (Cliente)
-// Admins receberão 403 Forbidden se tentarem acessar qualquer rota aqui.
 [Authorize(Roles = "User")]
 public class CartController : ControllerBase
 {
@@ -31,6 +29,18 @@ public class CartController : ControllerBase
     public async Task<IActionResult> AddItem(AddToCartDto dto)
     {
         try { await _cartService.AddItemAsync(GetUserId(), dto); return Ok(); }
+        catch (Exception ex) { return BadRequest(ex.Message); }
+    }
+
+    // NOVO ENDPOINT: Atualizar Quantidade
+    [HttpPatch("items/{itemId}")]
+    public async Task<IActionResult> UpdateQuantity(Guid itemId, [FromBody] UpdateCartItemDto dto)
+    {
+        try
+        {
+            await _cartService.UpdateItemQuantityAsync(GetUserId(), itemId, dto.Quantity);
+            return Ok();
+        }
         catch (Exception ex) { return BadRequest(ex.Message); }
     }
 
