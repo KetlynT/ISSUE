@@ -82,11 +82,12 @@ builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
+builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 
 // --- ESTRATÉGIA DE FRETE ---
 // Aqui registramos os provedores. 
 // Para adicionar Jadlog no futuro: builder.Services.AddScoped<IShippingService, JadlogShippingService>();
-builder.Services.AddScoped<IShippingService, CorreiosShippingService>();
+builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 
 // Ferramentas
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
