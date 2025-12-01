@@ -20,13 +20,19 @@ using System.Text;
 using Ganss.Xss;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- 1. Adicionar HttpClient (Essencial para chamar API dos Correios) ---
+// --- 1. Infraestrutura Web ---
 builder.Services.AddHttpClient();
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpContextAccessor();
 
-// --- OTIMIZAÇÃO: Compressão ---
+// --- 2. Performance & Segurança ---
+builder.Services.AddMemoryCache();
+
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -36,11 +42,25 @@ builder.Services.AddResponseCompression(options =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(options => { options.Level = CompressionLevel.Fastest; });
 builder.Services.Configure<GzipCompressionProviderOptions>(options => { options.Level = CompressionLevel.SmallestSize; });
 
-// Banco de Dados
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 300, // Aumentei um pouco para não bloquear o dashboard
+                QueueLimit = 2,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+
+// --- 3. Banco de Dados & Identity ---
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = false;
@@ -52,7 +72,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// JWT
+// --- 4. Autenticação JWT ---
 var key = Encoding.ASCII.GetBytes(builder.Configuration["Jwt:Key"]!);
 builder.Services.AddAuthentication(options =>
 {
@@ -75,28 +95,27 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// --- DI: Serviços ---
+// --- 5. Injeção de Dependência (DI) ---
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+
+// Services de Aplicação
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
-builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
-builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
+builder.Services.AddScoped<ICartService, CartService>();       // Carrinho e Pedidos
+builder.Services.AddScoped<ICouponService, CouponService>();   // Cupons
 
-// --- ESTRATÉGIA DE FRETE ---
-// Aqui registramos os provedores. 
-// Para adicionar Jadlog no futuro: builder.Services.AddScoped<IShippingService, JadlogShippingService>();
+// Services de Infraestrutura
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
+builder.Services.AddScoped<IEmailService, ConsoleEmailService>(); // Mock de Email
+builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
 
 // Ferramentas
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
 
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-
+// Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica A Moderna API", Version = "v1" });
@@ -123,6 +142,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
@@ -133,8 +153,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// --- Pipeline ---
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseResponseCompression();
+app.UseRateLimiter();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -144,7 +166,6 @@ using (var scope = app.Services.CreateScope())
         var context = services.GetRequiredService<AppDbContext>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
-        // Seed inicial
         if (app.Environment.IsDevelopment())
         {
             await DbSeeder.SeedAsync(context, userManager);

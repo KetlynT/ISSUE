@@ -11,7 +11,8 @@ public record CreateProductDto(
     [Range(0.001, 1000, ErrorMessage = "Peso inválido (kg)")] decimal Weight,
     [Range(1, 1000, ErrorMessage = "Largura inválida (cm)")] int Width,
     [Range(1, 1000, ErrorMessage = "Altura inválida (cm)")] int Height,
-    [Range(1, 1000, ErrorMessage = "Comprimento inválido (cm)")] int Length
+    [Range(1, 1000, ErrorMessage = "Comprimento inválido (cm)")] int Length,
+    [Range(0, 10000, ErrorMessage = "Estoque inválido")] int StockQuantity // NOVO
 );
 
 // Output (Response)
@@ -24,5 +25,6 @@ public record ProductResponseDto(
     decimal Weight,
     int Width,
     int Height,
-    int Length
+    int Length,
+    int StockQuantity // NOVO
 );

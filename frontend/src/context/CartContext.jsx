@@ -1,0 +1,58 @@
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { CartService } from '../services/cartService';
+import { AuthService } from '../services/authService';
+import toast from 'react-hot-toast';
+
+const CartContext = createContext();
+
+export const CartProvider = ({ children }) => {
+  const [cartCount, setCartCount] = useState(0);
+  const [cartTotal, setCartTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Atualiza o contador quando o app carrega ou usuário loga
+  useEffect(() => {
+    if (AuthService.isAuthenticated()) {
+      fetchCartCount();
+    }
+  }, []);
+
+  const fetchCartCount = async () => {
+    try {
+      const cart = await CartService.getCart();
+      // Soma a quantidade de todos os itens
+      const count = cart.items.reduce((acc, item) => acc + item.quantity, 0);
+      setCartCount(count);
+      setCartTotal(cart.grandTotal);
+    } catch (error) {
+      console.error("Erro ao carregar carrinho", error);
+    }
+  };
+
+  const addToCart = async (productId, quantity = 1) => {
+    if (!AuthService.isAuthenticated()) {
+      toast.error("Faça login para adicionar ao carrinho");
+      // Opcional: Redirecionar para login
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await CartService.addItem(productId, quantity);
+      toast.success("Produto adicionado!");
+      await fetchCartCount(); // Atualiza o contador
+    } catch (error) {
+      toast.error("Erro ao adicionar produto");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <CartContext.Provider value={{ cartCount, cartTotal, addToCart, fetchCartCount, loading }}>
+      {children}
+    </CartContext.Provider>
+  );
+};
+
+export const useCart = () => useContext(CartContext);

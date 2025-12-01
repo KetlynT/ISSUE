@@ -10,13 +10,15 @@ public class Product
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
-    // Propriedades para Frete
+    // Frete
     public decimal Weight { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
     public int Length { get; private set; }
 
-    // CORREÇÃO: Inicializando propriedades não nulas para evitar erro CS8618
+    // NOVO: Estoque
+    public int StockQuantity { get; private set; }
+
     protected Product()
     {
         Name = string.Empty;
@@ -24,9 +26,9 @@ public class Product
         ImageUrl = string.Empty;
     }
 
-    public Product(string name, string description, decimal price, string imageUrl, decimal weight, int width, int height, int length)
+    public Product(string name, string description, decimal price, string imageUrl, decimal weight, int width, int height, int length, int stockQuantity)
     {
-        ValidateDomain(name, price, weight, width, height, length);
+        ValidateDomain(name, price, weight, width, height, length, stockQuantity);
 
         Id = Guid.NewGuid();
         Name = name;
@@ -37,13 +39,14 @@ public class Product
         Width = width;
         Height = height;
         Length = length;
+        StockQuantity = stockQuantity; // Inicializa estoque
         IsActive = true;
         CreatedAt = DateTime.UtcNow;
     }
 
-    public void Update(string name, string description, decimal price, string imageUrl, decimal weight, int width, int height, int length)
+    public void Update(string name, string description, decimal price, string imageUrl, decimal weight, int width, int height, int length, int stockQuantity)
     {
-        ValidateDomain(name, price, weight, width, height, length);
+        ValidateDomain(name, price, weight, width, height, length, stockQuantity);
         Name = name;
         Description = description;
         Price = price;
@@ -52,22 +55,25 @@ public class Product
         Width = width;
         Height = height;
         Length = length;
+        StockQuantity = stockQuantity;
+    }
+
+    public void DebitStock(int quantity)
+    {
+        if (StockQuantity < quantity)
+            throw new Exception($"Estoque insuficiente para o produto '{Name}'. Restam apenas {StockQuantity}.");
+
+        StockQuantity -= quantity;
     }
 
     public void Deactivate() => IsActive = false;
 
-    private void ValidateDomain(string name, decimal price, decimal weight, int width, int height, int length)
+    private void ValidateDomain(string name, decimal price, decimal weight, int width, int height, int length, int stock)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("O nome do produto é obrigatório.");
-
-        if (price < 0)
-            throw new ArgumentException("O preço não pode ser negativo.");
-
-        if (weight <= 0)
-            throw new ArgumentException("O peso deve ser maior que zero.");
-
-        if (width < 0 || height < 0 || length < 0)
-            throw new ArgumentException("As dimensões não podem ser negativas.");
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("O nome do produto é obrigatório.");
+        if (price < 0) throw new ArgumentException("O preço não pode ser negativo.");
+        if (weight <= 0) throw new ArgumentException("O peso deve ser maior que zero.");
+        if (width < 0 || height < 0 || length < 0) throw new ArgumentException("As dimensões não podem ser negativas.");
+        if (stock < 0) throw new ArgumentException("O estoque não pode ser negativo.");
     }
 }

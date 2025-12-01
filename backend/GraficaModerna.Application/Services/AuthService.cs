@@ -80,4 +80,34 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto(tokenHandler.WriteToken(token), user.Email!, "Admin");
     }
+    public async Task<UserProfileDto> GetProfileAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) throw new Exception("Usuário não encontrado.");
+
+        return new UserProfileDto(
+            user.FullName,
+            user.Email!,
+            user.PhoneNumber,
+            user.ZipCode,
+            user.Address,
+            user.City,
+            user.State
+        );
+    }
+
+    public async Task UpdateProfileAsync(string userId, UpdateProfileDto dto)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) throw new Exception("Usuário não encontrado.");
+
+        user.FullName = dto.FullName;
+        user.PhoneNumber = dto.PhoneNumber;
+        user.ZipCode = dto.ZipCode;
+        user.Address = dto.Address;
+        user.City = dto.City;
+        user.State = dto.State;
+
+        await _userManager.UpdateAsync(user);
+    }
 }
