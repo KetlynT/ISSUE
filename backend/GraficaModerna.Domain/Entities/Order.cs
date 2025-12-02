@@ -14,6 +14,9 @@ public class Order
 
     public string Status { get; set; } = "Pendente";
 
+    // NOVO: Código de Rastreio
+    public string? TrackingCode { get; set; }
+
     // Endereço (Snapshot)
     public string ShippingAddress { get; set; } = string.Empty;
     public string ShippingZipCode { get; set; } = string.Empty;

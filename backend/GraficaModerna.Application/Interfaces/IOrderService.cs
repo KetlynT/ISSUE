@@ -11,6 +11,6 @@ public interface IOrderService
     Task<List<OrderDto>> GetUserOrdersAsync(string userId);
     Task<List<OrderDto>> GetAllOrdersAsync();
 
-    // Gestão de Status
-    Task UpdateOrderStatusAsync(Guid orderId, string status);
+    // Gestão de Status (Atualizado para receber TrackingCode)
+    Task UpdateOrderStatusAsync(Guid orderId, string status, string? trackingCode);
 }

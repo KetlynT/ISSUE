@@ -11,7 +11,6 @@ export const CartService = {
     await api.post('/cart/items', { productId, quantity });
   },
 
-  // NOVA FUNÇÃO
   updateQuantity: async (itemId, quantity) => {
     await api.patch(`/cart/items/${itemId}`, { quantity });
   },
@@ -46,9 +45,8 @@ export const CartService = {
     return response.data;
   },
 
-  updateOrderStatus: async (orderId, newStatus) => {
-    await api.patch(`/orders/${orderId}/status`, JSON.stringify(newStatus), {
-        headers: { 'Content-Type': 'application/json' }
-    });
+  // ATUALIZADO: Aceita trackingCode
+  updateOrderStatus: async (orderId, newStatus, trackingCode = null) => {
+    await api.patch(`/orders/${orderId}/status`, { status: newStatus, trackingCode });
   }
 };

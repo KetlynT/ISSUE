@@ -40,7 +40,6 @@ public class OrderService : IOrderService
             {
                 if (item.Product == null) continue;
 
-                // Validação crítica de estoque com "Lock" otimista via EF
                 if (item.Product.StockQuantity < item.Quantity)
                     throw new Exception($"Estoque insuficiente para {item.Product.Name}.");
 
@@ -81,19 +80,18 @@ public class OrderService : IOrderService
 
             _context.Orders.Add(order);
 
-            // 5. Limpa o Carrinho (pois virou pedido)
+            // 5. Limpa o Carrinho
             _context.CartItems.RemoveRange(cart.Items);
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            // 6. Notificação Assíncrona
             try
             {
                 var user = await _context.Users.FindAsync(userId);
                 if (user != null) _ = _emailService.SendEmailAsync(user.Email!, "Pedido Confirmado", $"Seu pedido #{order.Id} foi recebido com sucesso.");
             }
-            catch { /* Log erro de email sem parar o fluxo */ }
+            catch { }
 
             return MapToDto(order);
         }
@@ -125,13 +123,27 @@ public class OrderService : IOrderService
         return orders.Select(MapToDto).ToList();
     }
 
-    public async Task UpdateOrderStatusAsync(Guid orderId, string status)
+    // ATUALIZADO: Agora aceita TrackingCode
+    public async Task UpdateOrderStatusAsync(Guid orderId, string status, string? trackingCode)
     {
         var order = await _context.Orders.FindAsync(orderId);
         if (order != null)
         {
             order.Status = status;
+
+            // Só atualiza o código se ele for fornecido (não sobrescreve com null se já existir)
+            if (!string.IsNullOrEmpty(trackingCode))
+            {
+                order.TrackingCode = trackingCode;
+            }
+
             await _context.SaveChangesAsync();
+
+            // Lógica de notificação simplificada (pode ser expandida)
+            if (status == "Enviado" && !string.IsNullOrEmpty(trackingCode))
+            {
+                // Enviar email com código de rastreio...
+            }
         }
     }
 
@@ -142,6 +154,7 @@ public class OrderService : IOrderService
             order.OrderDate,
             order.TotalAmount,
             order.Status,
+            order.TrackingCode, // Mapeia o novo campo
             order.ShippingAddress,
             order.Items.Select(i => new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)).ToList()
         );

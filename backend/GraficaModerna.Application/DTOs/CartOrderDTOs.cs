@@ -3,7 +3,7 @@
 // --- CARRINHO ---
 public record AddToCartDto(Guid ProductId, int Quantity);
 
-public record UpdateCartItemDto(int Quantity); // NOVO: DTO para atualizar quantidade
+public record UpdateCartItemDto(int Quantity);
 
 public record CartItemDto(
     Guid Id,
@@ -13,7 +13,6 @@ public record CartItemDto(
     decimal UnitPrice,
     int Quantity,
     decimal TotalPrice,
-    // NOVOS CAMPOS PARA FRETE
     decimal Weight,
     int Width,
     int Height,
@@ -28,8 +27,12 @@ public record OrderDto(
     DateTime OrderDate,
     decimal TotalAmount,
     string Status,
+    string? TrackingCode, // NOVO
     string ShippingAddress,
     List<OrderItemDto> Items
 );
 
 public record OrderItemDto(string ProductName, int Quantity, decimal UnitPrice, decimal Total);
+
+// NOVO: DTO para atualização de status com rastreio
+public record UpdateOrderStatusDto(string Status, string? TrackingCode);

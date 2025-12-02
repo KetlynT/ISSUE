@@ -9,8 +9,8 @@ import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
 import { 
   LogOut, Edit, Trash2, Package, Settings, FileText, 
-  Layout, Image as ImageIcon, Box, Truck, BarChart2, 
-  AlertTriangle, DollarSign, ShoppingBag, Tag 
+  Box, Truck, BarChart2, AlertTriangle, DollarSign, 
+  ShoppingBag, Tag, Search, Eye, X 
 } from 'lucide-react';
 
 import ReactQuill from 'react-quill';
@@ -42,11 +42,11 @@ export const AdminDashboard = () => {
             <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<BarChart2 size={18} />}>
                 Visão Geral
             </TabButton>
-            <TabButton active={activeTab === 'products'} onClick={() => setActiveTab('products')} icon={<Package size={18} />}>
-                Produtos
-            </TabButton>
             <TabButton active={activeTab === 'orders'} onClick={() => setActiveTab('orders')} icon={<Truck size={18} />}>
                 Pedidos
+            </TabButton>
+            <TabButton active={activeTab === 'products'} onClick={() => setActiveTab('products')} icon={<Package size={18} />}>
+                Produtos
             </TabButton>
             <TabButton active={activeTab === 'coupons'} onClick={() => setActiveTab('coupons')} icon={<Tag size={18} />}>
                 Cupons
@@ -141,49 +141,239 @@ const OverviewTab = () => {
                     <div className="text-xs text-gray-500 mt-1">Produtos com menos de 10 un.</div>
                 </div>
             </div>
+        </div>
+    );
+};
 
-            <div className="grid md:grid-cols-2 gap-8">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="font-bold text-gray-800 mb-4">Estoque Baixo</h3>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-gray-500 border-b">
-                                <tr><th className="pb-2">Produto</th><th className="pb-2 text-right">Qtd</th></tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {stats.lowStockProducts.map(p => (
-                                    <tr key={p.id}>
-                                        <td className="py-3">{p.name}</td>
-                                        <td className="py-3 text-right font-bold text-red-600">{p.stockQuantity}</td>
-                                    </tr>
-                                ))}
-                                {stats.lowStockProducts.length === 0 && (
-                                    <tr><td colSpan="2" className="py-4 text-center text-gray-400">Estoque saudável!</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+// --- ABA: PEDIDOS (TOTALMENTE REVAMPADA) ---
+const OrdersTab = () => {
+    const [orders, setOrders] = useState([]);
+    const [filteredOrders, setFilteredOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Todos');
+    
+    // Modal de Edição
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [trackingInput, setTrackingInput] = useState('');
+    const [statusInput, setStatusInput] = useState('');
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="font-bold text-gray-800 mb-4">Últimos Pedidos</h3>
-                    <div className="space-y-4">
-                        {stats.recentOrders.map(o => (
-                            <div key={o.id} className="flex justify-between items-center border-b border-gray-50 pb-2 last:border-0">
-                                <div>
-                                    <div className="font-medium text-gray-800">Pedido #{o.id.slice(0,6)}</div>
-                                    <div className="text-xs text-gray-500">{new Date(o.date).toLocaleDateString('pt-BR')}</div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="font-bold text-blue-600">R$ {o.totalAmount.toFixed(2)}</div>
-                                    <div className="text-xs text-gray-500">{o.status}</div>
-                                </div>
-                            </div>
-                        ))}
+    useEffect(() => { loadOrders(); }, []);
+
+    // Filtros
+    useEffect(() => {
+        let result = orders;
+        if(statusFilter !== 'Todos') {
+            result = result.filter(o => o.status === statusFilter);
+        }
+        if(searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            result = result.filter(o => 
+                o.id.toLowerCase().includes(lowerTerm) || 
+                o.shippingAddress.toLowerCase().includes(lowerTerm)
+            );
+        }
+        setFilteredOrders(result);
+    }, [orders, statusFilter, searchTerm]);
+
+    const loadOrders = async () => {
+        try {
+            const data = await CartService.getAllOrders();
+            setOrders(data);
+        } catch (e) {
+            toast.error("Erro ao carregar pedidos.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpenModal = (order) => {
+        setSelectedOrder(order);
+        setStatusInput(order.status);
+        setTrackingInput(order.trackingCode || '');
+    };
+
+    const handleCloseModal = () => {
+        setSelectedOrder(null);
+    };
+
+    const handleUpdateOrder = async (e) => {
+        e.preventDefault();
+        try {
+            await CartService.updateOrderStatus(selectedOrder.id, statusInput, trackingInput);
+            
+            // Atualiza lista localmente
+            const updatedList = orders.map(o => o.id === selectedOrder.id ? {...o, status: statusInput, trackingCode: trackingInput} : o);
+            setOrders(updatedList);
+            
+            toast.success("Pedido atualizado com sucesso!");
+            handleCloseModal();
+        } catch (err) {
+            toast.error("Erro ao atualizar pedido.");
+        }
+    };
+
+    if (loading) return <div className="text-center py-10">Carregando pedidos...</div>;
+
+    return (
+        <div>
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h2 className="text-xl font-bold text-gray-800">Gerenciamento de Pedidos</h2>
+                <div className="flex gap-2 w-full md:w-auto">
+                    <div className="relative flex-grow">
+                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                        <input 
+                            className="pl-10 pr-4 py-2 border rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Buscar ID ou Endereço..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
                     </div>
+                    <select 
+                        className="border rounded-lg px-3 py-2 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                        value={statusFilter}
+                        onChange={e => setStatusFilter(e.target.value)}
+                    >
+                        <option value="Todos">Todos Status</option>
+                        <option value="Pendente">Pendente</option>
+                        <option value="Pago">Pago</option>
+                        <option value="Enviado">Enviado</option>
+                        <option value="Entregue">Entregue</option>
+                        <option value="Cancelado">Cancelado</option>
+                    </select>
                 </div>
             </div>
+
+            <div className="bg-white rounded-lg shadow border overflow-hidden">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b text-gray-600 uppercase">
+                        <tr>
+                            <th className="p-4">Pedido</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Rastreio</th>
+                            <th className="p-4 text-right">Total</th>
+                            <th className="p-4 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {filteredOrders.map(o => (
+                            <tr key={o.id} className="hover:bg-gray-50">
+                                <td className="p-4">
+                                    <div className="font-bold text-gray-800 font-mono">#{o.id.slice(0, 8)}</div>
+                                    <div className="text-xs text-gray-500">{new Date(o.orderDate).toLocaleDateString('pt-BR')}</div>
+                                </td>
+                                <td className="p-4">
+                                    <OrderStatusBadge status={o.status} />
+                                </td>
+                                <td className="p-4 font-mono text-xs text-gray-600">
+                                    {o.trackingCode || '-'}
+                                </td>
+                                <td className="p-4 text-right font-bold text-green-700">
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}
+                                </td>
+                                <td className="p-4 text-right">
+                                    <Button size="sm" variant="ghost" onClick={() => handleOpenModal(o)} className="text-blue-600 hover:bg-blue-50">
+                                        <Eye size={18} /> Detalhes
+                                    </Button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {filteredOrders.length === 0 && <div className="p-8 text-center text-gray-500">Nenhum pedido encontrado.</div>}
+            </div>
+
+            {/* MODAL DE DETALHES DO PEDIDO */}
+            {selectedOrder && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+                        <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                            <h3 className="text-xl font-bold text-gray-800">Pedido #{selectedOrder.id.slice(0,8)}</h3>
+                            <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600"><X size={24}/></button>
+                        </div>
+                        
+                        <div className="p-6 space-y-6">
+                            {/* Produtos */}
+                            <div>
+                                <h4 className="font-bold text-sm text-gray-500 uppercase mb-3">Itens do Pedido</h4>
+                                <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-100">
+                                    {selectedOrder.items.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between text-sm">
+                                            <span>{item.quantity}x {item.productName}</span>
+                                            <span className="font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.total)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="pt-2 mt-2 border-t flex justify-between font-bold text-gray-800">
+                                        <span>Total</span>
+                                        <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedOrder.totalAmount)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Endereço */}
+                            <div>
+                                <h4 className="font-bold text-sm text-gray-500 uppercase mb-2">Entrega</h4>
+                                <p className="text-gray-700 text-sm border p-3 rounded bg-gray-50">{selectedOrder.shippingAddress}</p>
+                            </div>
+
+                            {/* Formulário de Gestão */}
+                            <form onSubmit={handleUpdateOrder} className="bg-blue-50 p-5 rounded-xl border border-blue-100">
+                                <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2"><Settings size={18}/> Gerenciar Pedido</h4>
+                                
+                                <div className="grid md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Status</label>
+                                        <select 
+                                            className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500"
+                                            value={statusInput}
+                                            onChange={e => setStatusInput(e.target.value)}
+                                        >
+                                            <option value="Pendente">Pendente</option>
+                                            <option value="Pago">Pago</option>
+                                            <option value="Enviado">Enviado</option>
+                                            <option value="Entregue">Entregue</option>
+                                            <option value="Cancelado">Cancelado</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Código de Rastreio</label>
+                                        <input 
+                                            className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500"
+                                            placeholder="Ex: AA123456789BR"
+                                            value={trackingInput}
+                                            onChange={e => setTrackingInput(e.target.value)}
+                                            disabled={statusInput !== 'Enviado' && !trackingInput} 
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Habilitado principalmente para status 'Enviado'.</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3">
+                                    <Button type="button" variant="ghost" onClick={handleCloseModal}>Cancelar</Button>
+                                    <Button type="submit">Salvar Alterações</Button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
+    );
+};
+
+const OrderStatusBadge = ({ status }) => {
+    const styles = {
+        'Pendente': 'bg-yellow-100 text-yellow-800',
+        'Pago': 'bg-indigo-100 text-indigo-800',
+        'Enviado': 'bg-blue-100 text-blue-800',
+        'Entregue': 'bg-green-100 text-green-800',
+        'Cancelado': 'bg-red-100 text-red-800',
+    };
+    return (
+        <span className={`px-2 py-1 rounded text-xs font-bold ${styles[status] || 'bg-gray-100'}`}>
+            {status}
+        </span>
     );
 };
 
@@ -361,95 +551,7 @@ const ProductsTab = () => {
   );
 };
 
-// --- ABA: PEDIDOS ---
-const OrdersTab = () => {
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => { loadOrders(); }, []);
-
-    const loadOrders = async () => {
-        try {
-            const data = await CartService.getAllOrders();
-            setOrders(data);
-        } catch (e) {
-            toast.error("Erro ao carregar pedidos.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleStatusChange = async (id, newStatus) => {
-        try {
-            await CartService.updateOrderStatus(id, newStatus);
-            setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
-            toast.success(`Pedido marcado como ${newStatus}!`);
-        } catch (e) {
-            toast.error("Erro ao atualizar status.");
-        }
-    };
-
-    if (loading) return <div className="text-center py-10">Carregando pedidos...</div>;
-
-    return (
-        <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Gerenciamento de Pedidos</h2>
-            <div className="bg-white rounded-lg shadow border overflow-hidden">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b text-gray-600 text-sm uppercase">
-                        <tr>
-                            <th className="p-4">ID / Data</th>
-                            <th className="p-4">Entrega</th>
-                            <th className="p-4">Total</th>
-                            <th className="p-4">Status</th>
-                            <th className="p-4 text-right">Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {orders.map(o => (
-                            <tr key={o.id} className="hover:bg-gray-50">
-                                <td className="p-4">
-                                    <div className="font-bold text-gray-800 text-xs font-mono">{o.id.slice(0, 8)}...</div>
-                                    <div className="text-xs text-gray-500">{new Date(o.orderDate).toLocaleDateString('pt-BR')}</div>
-                                </td>
-                                <td className="p-4 text-sm text-gray-600">
-                                    <div className="line-clamp-1" title={o.shippingAddress}>{o.shippingAddress}</div>
-                                </td>
-                                <td className="p-4 font-mono text-green-600 font-bold">
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}
-                                </td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                        o.status === 'Enviado' ? 'bg-green-100 text-green-800' : 
-                                        o.status === 'Entregue' ? 'bg-blue-100 text-blue-800' :
-                                        'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                        {o.status}
-                                    </span>
-                                </td>
-                                <td className="p-4 text-right flex gap-2 justify-end">
-                                    {o.status === 'Pendente' && (
-                                        <Button size="sm" onClick={() => handleStatusChange(o.id, 'Enviado')} className="text-xs py-1 px-3 h-auto">
-                                            Marcar Enviado
-                                        </Button>
-                                    )}
-                                    {o.status === 'Enviado' && (
-                                        <Button size="sm" variant="success" onClick={() => handleStatusChange(o.id, 'Entregue')} className="text-xs py-1 px-3 h-auto">
-                                            Marcar Entregue
-                                        </Button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {orders.length === 0 && <div className="p-8 text-center text-gray-500">Nenhum pedido encontrado.</div>}
-            </div>
-        </div>
-    );
-};
-
-// --- ABA: CUPONS (NOVA) ---
+// --- ABA: CUPONS ---
 const CouponsTab = () => {
     const [coupons, setCoupons] = useState([]);
     const [form, setForm] = useState({ code: '', discountPercentage: '', validityDays: '30' });
@@ -535,7 +637,7 @@ const CouponsTab = () => {
     );
 };
 
-// --- ABA: CONFIGURAÇÕES (MANTIDA) ---
+// --- ABA: CONFIGURAÇÕES ---
 const SettingsTab = () => {
     const [formData, setFormData] = useState({});
     const [heroImageFile, setHeroImageFile] = useState(null);
@@ -590,7 +692,7 @@ const SettingsTab = () => {
     );
 };
 
-// --- ABA: PÁGINAS (MANTIDA) ---
+// --- ABA: PÁGINAS ---
 const PagesTab = () => {
     const [pages, setPages] = useState([]);
     const [selectedPage, setSelectedPage] = useState(null);
