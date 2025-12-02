@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CartService } from '../services/cartService';
-import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard } from 'lucide-react';
+import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
@@ -36,9 +36,23 @@ export const MyOrders = () => {
     try {
         await CartService.payOrder(orderId);
         toast.success("Pagamento aprovado!", { id: loadingToast });
-        loadOrders(); // Recarrega para atualizar status
+        loadOrders();
     } catch (error) {
         toast.error("Erro no pagamento.", { id: loadingToast });
+    }
+  };
+
+  const handleRefund = async (e, orderId) => {
+    e.stopPropagation();
+    if(!window.confirm("Deseja realmente solicitar o reembolso deste pedido?")) return;
+
+    const loadingToast = toast.loading("Enviando solicitação...");
+    try {
+        await CartService.requestRefund(orderId);
+        toast.success("Solicitação enviada!", { id: loadingToast });
+        loadOrders();
+    } catch (error) {
+        toast.error(error.response?.data?.message || "Erro ao solicitar reembolso.", { id: loadingToast });
     }
   };
 
@@ -80,11 +94,17 @@ export const MyOrders = () => {
                         <StatusBadge status={order.status} />
                     </div>
                     <div className="text-sm text-gray-500 flex items-center gap-2">
-                        <Calendar size={14} /> {new Date(order.orderDate).toLocaleDateString('pt-BR')} às {new Date(order.orderDate).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                        <Calendar size={14} /> {new Date(order.orderDate).toLocaleDateString('pt-BR')}
                     </div>
+                    {/* Código de Rastreio Visível */}
+                    {order.trackingCode && (
+                        <div className="text-sm text-blue-600 font-medium flex items-center gap-1 mt-1">
+                            <Truck size={14}/> Rastreio: <span className="font-mono bg-blue-100 px-1 rounded">{order.trackingCode}</span>
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex items-center justify-between md:justify-end gap-6">
+                <div className="flex items-center justify-between md:justify-end gap-4">
                     <div className="text-right">
                         <div className="text-xs text-gray-500 uppercase font-bold">Total</div>
                         <div className="text-xl font-bold text-green-600">
@@ -92,11 +112,19 @@ export const MyOrders = () => {
                         </div>
                     </div>
                     
-                    {order.status === 'Pendente' && (
-                        <Button size="sm" onClick={(e) => handlePay(e, order.id)} className="hidden md:flex">
-                            <CreditCard size={16} /> Pagar Agora
-                        </Button>
-                    )}
+                    {/* Ações Rápidas */}
+                    <div className="flex gap-2">
+                        {order.status === 'Pendente' && (
+                            <Button size="sm" onClick={(e) => handlePay(e, order.id)}>
+                                <CreditCard size={16} /> Pagar
+                            </Button>
+                        )}
+                        {(order.status === 'Pago' || order.status === 'Enviado') && (
+                            <Button size="sm" variant="ghost" onClick={(e) => handleRefund(e, order.id)} className="text-red-500 hover:bg-red-50 hover:text-red-600 border border-red-200" title="Solicitar Reembolso">
+                                <RefreshCcw size={16} />
+                            </Button>
+                        )}
+                    </div>
 
                     {expandedOrderId === order.id ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
                 </div>
@@ -112,7 +140,6 @@ export const MyOrders = () => {
                         className="overflow-hidden border-t border-gray-100"
                     >
                         <div className="p-6 bg-white">
-                            {/* Endereço */}
                             <div className="mb-6 flex items-start gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
                                 <MapPin size={18} className="mt-0.5 text-blue-600" />
                                 <div>
@@ -121,13 +148,12 @@ export const MyOrders = () => {
                                 </div>
                             </div>
 
-                            {/* Lista de Itens */}
                             <table className="w-full text-left text-sm">
                                 <thead className="text-gray-500 border-b">
                                     <tr>
                                         <th className="pb-2 font-medium">Produto</th>
                                         <th className="pb-2 font-medium text-center">Qtd</th>
-                                        <th className="pb-2 font-medium text-right">Preço Unit.</th>
+                                        <th className="pb-2 font-medium text-right">Unitário</th>
                                         <th className="pb-2 font-medium text-right">Total</th>
                                     </tr>
                                 </thead>
@@ -146,15 +172,6 @@ export const MyOrders = () => {
                                     ))}
                                 </tbody>
                             </table>
-
-                            {/* Botão de Pagar Mobile */}
-                            {order.status === 'Pendente' && (
-                                <div className="mt-6 md:hidden">
-                                    <Button className="w-full" onClick={(e) => handlePay(e, order.id)}>
-                                        <CreditCard size={18} /> Pagar Agora
-                                    </Button>
-                                </div>
-                            )}
                         </div>
                     </motion.div>
                 )}
@@ -174,6 +191,8 @@ const StatusBadge = ({ status }) => {
         'Enviado': 'bg-blue-100 text-blue-800 border-blue-200',
         'Entregue': 'bg-gray-100 text-gray-800 border-gray-200',
         'Cancelado': 'bg-red-100 text-red-800 border-red-200',
+        'Reembolso Solicitado': 'bg-purple-100 text-purple-800 border-purple-200',
+        'Reembolsado': 'bg-gray-800 text-white border-gray-800'
     };
 
     return (

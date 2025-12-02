@@ -27,7 +27,6 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<List<OrderDto>>> GetAllOrders() => Ok(await _orderService.GetAllOrdersAsync());
 
-    // ATUALIZADO: Recebe objeto complexo em vez de string simples
     [HttpPatch("{id}/status")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusDto dto)
@@ -36,6 +35,20 @@ public class OrdersController : ControllerBase
         {
             await _orderService.UpdateOrderStatusAsync(id, dto.Status, dto.TrackingCode);
             return NoContent();
+        }
+        catch (Exception ex) { return BadRequest(ex.Message); }
+    }
+
+    // NOVO ENDPOINT: Solicitar Reembolso (Cliente)
+    [HttpPost("{id}/request-refund")]
+    [Authorize(Roles = "User")]
+    public async Task<IActionResult> RequestRefund(Guid id)
+    {
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await _orderService.RequestRefundAsync(id, userId!);
+            return Ok(new { message = "Reembolso solicitado com sucesso." });
         }
         catch (Exception ex) { return BadRequest(ex.Message); }
     }

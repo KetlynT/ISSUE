@@ -1,21 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
 import { ShippingService } from '../services/shippingService';
 import { useCart } from '../context/CartContext';
 import { AuthService } from '../services/authService';
-import { Truck, ShoppingCart, MessageSquare, Plus, Minus } from 'lucide-react';
+import { Truck, ShoppingCart, MessageSquare, Plus, Minus, Zap } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 export const ProductDetails = () => {
   const { id } = useParams();
   const { addToCart } = useCart();
+  const navigate = useNavigate();
   
   const [product, setProduct] = useState(null);
-  // Estado local para gerenciar a imagem e evitar piscadas
   const [imgSrc, setImgSrc] = useState('');
-  
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -26,7 +25,6 @@ export const ProductDetails = () => {
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcError, setCalcError] = useState('');
 
-  // Verifica se é admin
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = AuthService.isAuthenticated() && user.role === 'Admin';
 
@@ -38,7 +36,7 @@ export const ProductDetails = () => {
              ContentService.getSettings()
         ]);
         setProduct(prod);
-        setImgSrc(prod.imageUrl); // Inicializa a imagem
+        setImgSrc(prod.imageUrl);
         if (settings && settings.whatsapp_number) {
             setWhatsappNumber(settings.whatsapp_number);
         }
@@ -57,7 +55,6 @@ export const ProductDetails = () => {
         setCalcError("Digite um CEP válido.");
         return;
     }
-    
     setCalcLoading(true);
     setCalcError('');
     setShippingOptions(null);
@@ -73,7 +70,13 @@ export const ProductDetails = () => {
   };
 
   const handleAddToCart = async () => {
-    await addToCart(product.id, quantity);
+    await addToCart(product, quantity);
+  };
+
+  // NOVO: Comprar Agora
+  const handleBuyNow = async () => {
+    await addToCart(product, quantity);
+    navigate('/carrinho');
   };
 
   const handleCustomQuote = () => {
@@ -84,9 +87,7 @@ export const ProductDetails = () => {
 
   const handleImageError = () => {
     const fallbackUrl = 'https://placehold.co/600x400?text=Sem+Imagem';
-    if (imgSrc !== fallbackUrl) {
-      setImgSrc(fallbackUrl);
-    }
+    if (imgSrc !== fallbackUrl) setImgSrc(fallbackUrl);
   };
 
   if (loading) return <div className="text-center py-20">Carregando...</div>;
@@ -120,46 +121,36 @@ export const ProductDetails = () => {
             </p>
 
             <div className="flex flex-col gap-4 mb-8">
-                {/* Seletor de Quantidade: Apenas para NÃO Admin */}
+                {/* Seletor de Quantidade */}
                 {!isAdmin && (
                     <div className="flex items-center gap-4">
                         <div className="flex items-center border border-gray-300 rounded-lg">
-                            <button 
-                                onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                                className="p-3 text-gray-600 hover:bg-gray-100 transition-colors"
-                            >
-                                <Minus size={16} />
-                            </button>
+                            <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="p-3 text-gray-600 hover:bg-gray-100"><Minus size={16} /></button>
                             <span className="w-12 text-center font-bold text-gray-800">{quantity}</span>
-                            <button 
-                                onClick={() => setQuantity(q => q + 1)}
-                                className="p-3 text-gray-600 hover:bg-gray-100 transition-colors"
-                            >
-                                <Plus size={16} />
-                            </button>
+                            <button onClick={() => setQuantity(q => q + 1)} className="p-3 text-gray-600 hover:bg-gray-100"><Plus size={16} /></button>
                         </div>
                         <div className="text-sm text-gray-500">
-                            {product.stockQuantity > 0 ? `${product.stockQuantity} disponíveis` : 'Produto Indisponível'}
+                            {product.stockQuantity > 0 ? `${product.stockQuantity} disponíveis` : 'Indisponível'}
                         </div>
                     </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Botão Adicionar ao Carrinho: Apenas para NÃO Admin */}
                     {!isAdmin && (
-                        <Button 
-                            onClick={handleAddToCart}
-                            disabled={product.stockQuantity < 1}
-                            className="w-full py-3 text-base"
-                        >
-                            <ShoppingCart size={20}/> Adicionar ao Carrinho
-                        </Button>
+                        <>
+                            <Button onClick={handleAddToCart} disabled={product.stockQuantity < 1} variant="outline" className="text-blue-600 border-blue-600 hover:bg-blue-50">
+                                <ShoppingCart size={20}/> Adicionar
+                            </Button>
+                            
+                            <Button onClick={handleBuyNow} disabled={product.stockQuantity < 1} className="w-full py-3 text-base shadow-blue-500/30">
+                                <Zap size={20}/> Comprar Agora
+                            </Button>
+                        </>
                     )}
                     
-                    {/* Botão de Orçamento (Visível para todos) */}
                     <button 
                         onClick={handleCustomQuote}
-                        className={`w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${isAdmin ? 'col-span-2' : ''}`}
+                        className={`w-full border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${isAdmin ? 'col-span-2' : 'col-span-2'}`}
                     >
                         <MessageSquare size={20}/> Orçamento Personalizado
                     </button>
@@ -173,35 +164,24 @@ export const ProductDetails = () => {
                 </h3>
                 <form onSubmit={handleCalculateShipping} className="flex gap-2 mb-4">
                     <input 
-                        type="text" 
-                        placeholder="Digite seu CEP" 
-                        maxLength="9"
+                        type="text" placeholder="Digite seu CEP" maxLength="9"
                         className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={cep}
-                        onChange={(e) => setCep(e.target.value)}
+                        value={cep} onChange={(e) => setCep(e.target.value)}
                     />
-                    <button 
-                        type="submit" 
-                        disabled={calcLoading}
-                        className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded text-sm font-bold transition-colors disabled:opacity-50"
-                    >
+                    <button type="submit" disabled={calcLoading} className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded text-sm font-bold">
                         {calcLoading ? '...' : 'OK'}
                     </button>
                 </form>
-
                 {calcError && <div className="text-red-500 text-sm mb-2">{calcError}</div>}
-
                 {shippingOptions && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-2 animate-in fade-in">
                         {shippingOptions.map((opt, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-gray-200 text-sm shadow-sm">
-                                <div className="flex flex-col">
+                            <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-gray-200 text-sm">
+                                <div>
                                     <span className="font-bold text-gray-800">{opt.name}</span>
-                                    <span className="text-xs text-gray-500">Entrega em até {opt.deliveryDays} dias úteis</span>
+                                    <span className="text-xs text-gray-500 block">Até {opt.deliveryDays} dias úteis</span>
                                 </div>
-                                <span className="font-bold text-green-600">
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.price)}
-                                </span>
+                                <span className="font-bold text-green-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.price)}</span>
                             </div>
                         ))}
                     </div>

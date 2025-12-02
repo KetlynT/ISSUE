@@ -11,7 +11,7 @@ import ScrollToTop from './components/ScrollToTop';
 // Lazy Loading
 const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
-const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register }))); // <--- NOVO
+const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 const ProductDetails = lazy(() => import('./pages/ProductDetails').then(module => ({ default: module.ProductDetails })));
 const GenericPage = lazy(() => import('./pages/GenericPage').then(module => ({ default: module.GenericPage })));
@@ -44,11 +44,45 @@ const PublicOnlyRoute = ({ children }) => {
   return children;
 };
 
+// --- FUNÇÃO AUXILIAR PARA GERAR FAVICON "X" ---
+const setFallbackFavicon = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    
+    // Fundo
+    ctx.fillStyle = '#1f2937'; // gray-800
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 64, 64, 16);
+    ctx.fill();
+
+    // Texto "X"
+    ctx.font = 'bold 40px sans-serif';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', 32, 34);
+
+    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.type = 'image/png';
+    link.rel = 'icon';
+    link.href = canvas.toDataURL();
+    document.getElementsByTagName('head')[0].appendChild(link);
+};
+
 function App() {
   useEffect(() => {
-    const updateFavicon = async () => {
+    const updateSiteIdentity = async () => {
       try {
         const settings = await ContentService.getSettings();
+        
+        // Atualiza Título
+        if (settings && settings.site_name) {
+            document.title = settings.site_name;
+        }
+
+        // Atualiza Favicon
         if (settings && settings.site_logo) {
           let link = document.querySelector("link[rel~='icon']");
           if (!link) {
@@ -57,12 +91,16 @@ function App() {
             document.getElementsByTagName('head')[0].appendChild(link);
           }
           link.href = settings.site_logo;
+        } else {
+            // Se não tiver logo configurado, gera o "X"
+            setFallbackFavicon();
         }
       } catch (error) {
-        console.error("Erro ao atualizar favicon:", error);
+        console.error("Erro ao configurar identidade do site:", error);
+        setFallbackFavicon(); // Fallback em caso de erro
       }
     };
-    updateFavicon();
+    updateSiteIdentity();
   }, []);
 
   return (
@@ -85,7 +123,7 @@ function App() {
             </Route>
 
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-            <Route path="/cadastro" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} /> {/* <--- NOVA ROTA */}
+            <Route path="/cadastro" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
             
             <Route path="/portal-acesso-secreto-gm" element={<Navigate to="/login" replace />} />
             <Route path="/painel-restrito-gerencial" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />

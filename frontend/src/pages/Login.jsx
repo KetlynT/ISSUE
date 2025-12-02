@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthService } from '../services/authService';
+import { useCart } from '../context/CartContext';
 import { LogIn } from 'lucide-react';
 
 export const Login = () => {
@@ -8,7 +9,9 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
   const navigate = useNavigate();
+  const { syncGuestCart } = useCart();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -18,11 +21,18 @@ export const Login = () => {
     try {
       const data = await AuthService.login(email, password);
       
+      // TRAVA DE SEGURANÇA: Impede login de Admin nesta página
       if (data.role === 'Admin') {
-          navigate('/painel-restrito-gerencial');
-      } else {
-          navigate('/');
+          await AuthService.logout(); // Desloga imediatamente
+          setError('Acesso negado. Administradores devem usar o portal corporativo.');
+          setLoading(false);
+          return;
       }
+      
+      // Fluxo normal de Cliente
+      await syncGuestCart();
+      navigate('/'); 
+      
     } catch (err) {
       setError('Login falhou. Verifique suas credenciais.');
     } finally {

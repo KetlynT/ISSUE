@@ -145,7 +145,7 @@ const OverviewTab = () => {
     );
 };
 
-// --- ABA: PEDIDOS (TOTALMENTE REVAMPADA) ---
+// --- ABA: PEDIDOS (CORRIGIDA) ---
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);
     const [filteredOrders, setFilteredOrders] = useState([]);
@@ -153,14 +153,12 @@ const OrdersTab = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
     
-    // Modal de Edição
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [trackingInput, setTrackingInput] = useState('');
     const [statusInput, setStatusInput] = useState('');
 
     useEffect(() => { loadOrders(); }, []);
 
-    // Filtros
     useEffect(() => {
         let result = orders;
         if(statusFilter !== 'Todos') {
@@ -202,7 +200,6 @@ const OrdersTab = () => {
         try {
             await CartService.updateOrderStatus(selectedOrder.id, statusInput, trackingInput);
             
-            // Atualiza lista localmente
             const updatedList = orders.map(o => o.id === selectedOrder.id ? {...o, status: statusInput, trackingCode: trackingInput} : o);
             setOrders(updatedList);
             
@@ -240,6 +237,8 @@ const OrdersTab = () => {
                         <option value="Enviado">Enviado</option>
                         <option value="Entregue">Entregue</option>
                         <option value="Cancelado">Cancelado</option>
+                        <option value="Reembolso Solicitado">Reembolso Solicitado</option>
+                        <option value="Reembolsado">Reembolsado</option>
                     </select>
                 </div>
             </div>
@@ -283,7 +282,6 @@ const OrdersTab = () => {
                 {filteredOrders.length === 0 && <div className="p-8 text-center text-gray-500">Nenhum pedido encontrado.</div>}
             </div>
 
-            {/* MODAL DE DETALHES DO PEDIDO */}
             {selectedOrder && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
@@ -293,7 +291,6 @@ const OrdersTab = () => {
                         </div>
                         
                         <div className="p-6 space-y-6">
-                            {/* Produtos */}
                             <div>
                                 <h4 className="font-bold text-sm text-gray-500 uppercase mb-3">Itens do Pedido</h4>
                                 <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-100">
@@ -310,13 +307,11 @@ const OrdersTab = () => {
                                 </div>
                             </div>
 
-                            {/* Endereço */}
                             <div>
                                 <h4 className="font-bold text-sm text-gray-500 uppercase mb-2">Entrega</h4>
                                 <p className="text-gray-700 text-sm border p-3 rounded bg-gray-50">{selectedOrder.shippingAddress}</p>
                             </div>
 
-                            {/* Formulário de Gestão */}
                             <form onSubmit={handleUpdateOrder} className="bg-blue-50 p-5 rounded-xl border border-blue-100">
                                 <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2"><Settings size={18}/> Gerenciar Pedido</h4>
                                 
@@ -333,6 +328,8 @@ const OrdersTab = () => {
                                             <option value="Enviado">Enviado</option>
                                             <option value="Entregue">Entregue</option>
                                             <option value="Cancelado">Cancelado</option>
+                                            <option value="Reembolso Solicitado">Reembolso Solicitado</option>
+                                            <option value="Reembolsado">Reembolsado</option>
                                         </select>
                                     </div>
                                     
@@ -343,9 +340,7 @@ const OrdersTab = () => {
                                             placeholder="Ex: AA123456789BR"
                                             value={trackingInput}
                                             onChange={e => setTrackingInput(e.target.value)}
-                                            disabled={statusInput !== 'Enviado' && !trackingInput} 
                                         />
-                                        <p className="text-[10px] text-gray-500 mt-1">Habilitado principalmente para status 'Enviado'.</p>
                                     </div>
                                 </div>
 
@@ -369,6 +364,8 @@ const OrderStatusBadge = ({ status }) => {
         'Enviado': 'bg-blue-100 text-blue-800',
         'Entregue': 'bg-green-100 text-green-800',
         'Cancelado': 'bg-red-100 text-red-800',
+        'Reembolso Solicitado': 'bg-purple-100 text-purple-800',
+        'Reembolsado': 'bg-gray-800 text-white'
     };
     return (
         <span className={`px-2 py-1 rounded text-xs font-bold ${styles[status] || 'bg-gray-100'}`}>
@@ -675,9 +672,10 @@ const SettingsTab = () => {
     return (
         <form onSubmit={handleSave} className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-8">
             <div className="grid md:grid-cols-2 gap-4">
-                <InputGroup label="Badge" name="hero_badge" value={formData.hero_badge} onChange={handleChange} />
-                <InputGroup label="Título" name="hero_title" value={formData.hero_title} onChange={handleChange} />
-                <InputGroup label="Subtítulo" name="hero_subtitle" value={formData.hero_subtitle} onChange={handleChange} />
+                <InputGroup label="Nome do Negócio" name="site_name" value={formData.site_name} onChange={handleChange} placeholder="Ex: Minha Gráfica" />
+                <InputGroup label="Badge (Hero)" name="hero_badge" value={formData.hero_badge} onChange={handleChange} />
+                <InputGroup label="Título (Hero)" name="hero_title" value={formData.hero_title} onChange={handleChange} />
+                <InputGroup label="Subtítulo (Hero)" name="hero_subtitle" value={formData.hero_subtitle} onChange={handleChange} />
                 <InputGroup label="WhatsApp (Números)" name="whatsapp_number" value={formData.whatsapp_number} onChange={handleChange} />
                 <InputGroup label="WhatsApp (Visível)" name="whatsapp_display" value={formData.whatsapp_display} onChange={handleChange} />
                 <InputGroup label="CEP de Origem" name="sender_cep" value={formData.sender_cep} onChange={handleChange} />

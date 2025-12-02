@@ -25,7 +25,6 @@ public class OrderService : IOrderService
 
         try
         {
-            // 1. Recupera o Carrinho
             var cart = await _context.Carts
                 .Include(c => c.Items).ThenInclude(i => i.Product)
                 .FirstOrDefaultAsync(c => c.UserId == userId);
@@ -35,7 +34,6 @@ public class OrderService : IOrderService
             decimal subTotal = 0;
             var orderItems = new List<OrderItem>();
 
-            // 2. Processa Itens e Estoque
             foreach (var item in cart.Items)
             {
                 if (item.Product == null) continue;
@@ -55,7 +53,6 @@ public class OrderService : IOrderService
                 });
             }
 
-            // 3. Aplica Cupom
             decimal discount = 0;
             if (!string.IsNullOrEmpty(couponCode))
             {
@@ -63,7 +60,6 @@ public class OrderService : IOrderService
                 if (coupon != null) discount = subTotal * (coupon.DiscountPercentage / 100m);
             }
 
-            // 4. Cria o Pedido
             var order = new Order
             {
                 UserId = userId,
@@ -79,8 +75,6 @@ public class OrderService : IOrderService
             };
 
             _context.Orders.Add(order);
-
-            // 5. Limpa o Carrinho
             _context.CartItems.RemoveRange(cart.Items);
 
             await _context.SaveChangesAsync();
@@ -123,28 +117,32 @@ public class OrderService : IOrderService
         return orders.Select(MapToDto).ToList();
     }
 
-    // ATUALIZADO: Agora aceita TrackingCode
     public async Task UpdateOrderStatusAsync(Guid orderId, string status, string? trackingCode)
     {
         var order = await _context.Orders.FindAsync(orderId);
         if (order != null)
         {
             order.Status = status;
-
-            // Só atualiza o código se ele for fornecido (não sobrescreve com null se já existir)
-            if (!string.IsNullOrEmpty(trackingCode))
-            {
-                order.TrackingCode = trackingCode;
-            }
-
+            if (!string.IsNullOrEmpty(trackingCode)) order.TrackingCode = trackingCode;
             await _context.SaveChangesAsync();
-
-            // Lógica de notificação simplificada (pode ser expandida)
-            if (status == "Enviado" && !string.IsNullOrEmpty(trackingCode))
-            {
-                // Enviar email com código de rastreio...
-            }
         }
+    }
+
+    // NOVO: Lógica de Solicitação de Reembolso
+    public async Task RequestRefundAsync(Guid orderId, string userId)
+    {
+        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
+        if (order == null) throw new Exception("Pedido não encontrado.");
+
+        // Regras: Só pode pedir reembolso se estiver Pago ou Enviado (antes de entregue)
+        var allowedStatuses = new[] { "Pago", "Enviado" };
+        if (!allowedStatuses.Contains(order.Status))
+        {
+            throw new Exception($"Não é possível solicitar reembolso para pedidos com status: {order.Status}");
+        }
+
+        order.Status = "Reembolso Solicitado";
+        await _context.SaveChangesAsync();
     }
 
     private static OrderDto MapToDto(Order order)
@@ -154,7 +152,7 @@ public class OrderService : IOrderService
             order.OrderDate,
             order.TotalAmount,
             order.Status,
-            order.TrackingCode, // Mapeia o novo campo
+            order.TrackingCode,
             order.ShippingAddress,
             order.Items.Select(i => new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)).ToList()
         );

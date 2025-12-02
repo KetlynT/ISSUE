@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthService } from '../services/authService';
-import { UserPlus, User, Mail, Lock } from 'lucide-react';
+import { UserPlus, User, Mail, Lock, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Register = () => {
@@ -9,7 +9,8 @@ export const Register = () => {
     fullName: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    phoneNumber: '' // NOVO CAMPO
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -31,15 +32,21 @@ export const Register = () => {
       return;
     }
 
+    if (!formData.phoneNumber) {
+      toast.error("O telefone é obrigatório.");
+      return;
+    }
+
     setLoading(true);
     
     try {
-      await AuthService.register(formData.fullName, formData.email, formData.password);
+      // Atualizado para enviar 4 argumentos
+      await AuthService.register(formData.fullName, formData.email, formData.password, formData.phoneNumber);
       toast.success("Conta criada com sucesso! Bem-vindo.");
-      navigate('/'); // Redireciona para Home já logado
+      navigate('/'); 
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.message || "Erro ao criar conta. Tente outro email.";
+      const msg = err.response?.data?.message || err.response?.data || "Erro ao criar conta. Verifique os dados.";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -83,6 +90,23 @@ export const Register = () => {
                     className="w-full border border-gray-300 rounded-lg pl-10 p-2.5 outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="seu@email.com"
                     value={formData.email}
+                    onChange={handleChange}
+                    required
+                />
+            </div>
+          </div>
+
+          {/* NOVO CAMPO: Telefone */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Telefone / WhatsApp</label>
+            <div className="relative">
+                <Phone size={18} className="absolute left-3 top-3 text-gray-400" />
+                <input 
+                    name="phoneNumber"
+                    type="tel"
+                    className="w-full border border-gray-300 rounded-lg pl-10 p-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="(11) 99999-9999"
+                    value={formData.phoneNumber}
                     onChange={handleChange}
                     required
                 />

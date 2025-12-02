@@ -7,18 +7,31 @@ import { AuthService } from '../../services/authService';
 
 export const Header = () => {
   const [logoUrl, setLogoUrl] = useState('');
+  const [siteName, setSiteName] = useState('Gráfica Moderna');
+  const [loading, setLoading] = useState(true); // Estado de carregamento
+  
   const { cartCount } = useCart();
   const navigate = useNavigate();
   
   const isAuthenticated = AuthService.isAuthenticated();
-  // Recupera o usuário do localStorage para checar a role
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = isAuthenticated && user.role === 'Admin';
 
   useEffect(() => {
-    ContentService.getSettings().then(settings => {
-      if (settings && settings.site_logo) setLogoUrl(settings.site_logo);
-    });
+    const loadSettings = async () => {
+      try {
+        const settings = await ContentService.getSettings();
+        if (settings) {
+            if (settings.site_logo) setLogoUrl(settings.site_logo);
+            if (settings.site_name) setSiteName(settings.site_name);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar topo", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSettings();
   }, []);
 
   const handleLogout = () => {
@@ -27,29 +40,44 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        
+        {/* Lado Esquerdo: Logo e Nome */}
         <Link to="/" className="flex items-center gap-2 group">
-          {logoUrl ? (
-            <img src={logoUrl} alt="Logo" className="h-10 w-auto object-contain transition-transform group-hover:scale-105"/>
+          {loading ? (
+            <div className="animate-pulse flex items-center gap-2">
+                <div className="w-10 h-10 bg-gray-200 rounded-xl"></div>
+                <div className="h-4 w-32 bg-gray-200 rounded"></div>
+            </div>
           ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">M</div>
+            <>
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="h-10 w-auto object-contain transition-transform group-hover:scale-105"/>
+              ) : (
+                <div className="w-10 h-10 bg-gradient-to-br from-gray-800 to-black rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg group-hover:shadow-xl transition-all">
+                    X
+                </div>
+              )}
+              <div>
+                <h1 className="text-xl font-bold text-gray-800 leading-none tracking-tight">{siteName}</h1>
+              </div>
+            </>
           )}
-          <div>
-            <h1 className="text-xl font-bold text-gray-800 leading-none">Gráfica</h1>
-            <span className="text-xs text-blue-600 font-bold tracking-widest uppercase">A Moderna</span>
-          </div>
         </Link>
         
+        {/* Lado Direito: Navegação */}
         <nav className="flex items-center gap-6">
-          {/* Link de Contato (Visível para todos) */}
-          <Link to="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium">
-            <MessageSquare size={20} />
-            <span className="hidden lg:inline">Fale Conosco</span>
-          </Link>
+          {loading ? (
+             <div className="animate-pulse h-4 w-24 bg-gray-200 rounded hidden md:block"></div>
+          ) : (
+             <Link to="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium">
+                <MessageSquare size={20} />
+                <span className="hidden lg:inline">Fale Conosco</span>
+             </Link>
+          )}
 
-          {/* Carrinho: Oculto se for Admin */}
-          {!isAdmin && (
+          {!isAdmin && !loading && (
             <Link to="/carrinho" className="relative group p-2">
                 <ShoppingCart size={24} className="text-gray-600 group-hover:text-blue-600 transition-colors" />
                 {cartCount > 0 && (
@@ -61,40 +89,37 @@ export const Header = () => {
           )}
 
           {/* Área do Usuário */}
-          {isAuthenticated ? (
-            <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
-                {isAdmin ? (
-                    // --- MENU DE ADMINISTRADOR ---
-                    <Link 
-                        to="/painel-restrito-gerencial" 
-                        className="flex items-center gap-2 text-sm font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all" 
-                        title="Painel Administrativo"
-                    >
-                        <LayoutDashboard size={18} />
-                        <span className="hidden md:inline">Painel Gerencial</span>
-                    </Link>
-                ) : (
-                    // --- MENU DE CLIENTE ---
-                    <>
-                        <Link to="/meus-pedidos" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600" title="Meus Pedidos">
-                            <Package size={20} />
+          {!loading && (
+            isAuthenticated ? (
+                <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
+                    {isAdmin ? (
+                        <Link 
+                            to="/painel-restrito-gerencial" 
+                            className="flex items-center gap-2 text-sm font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all" 
+                        >
+                            <LayoutDashboard size={18} />
+                            <span className="hidden md:inline">Painel</span>
                         </Link>
-                        <Link to="/perfil" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600" title="Meu Perfil">
-                            <User size={20} />
-                        </Link>
-                    </>
-                )}
-                
-                {/* Botão Sair (Comum a ambos) */}
-                <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 ml-2" title="Sair">
-                    <LogOut size={20} />
-                </button>
-            </div>
-          ) : (
-            // --- VISITANTE ---
-            <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 border border-blue-100 bg-blue-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
-                <User size={18} /> Entrar
-            </Link>
+                    ) : (
+                        <>
+                            <Link to="/meus-pedidos" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600" title="Meus Pedidos">
+                                <Package size={20} />
+                            </Link>
+                            <Link to="/perfil" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-blue-600" title="Meu Perfil">
+                                <User size={20} />
+                            </Link>
+                        </>
+                    )}
+                    
+                    <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 ml-2" title="Sair">
+                        <LogOut size={20} />
+                    </button>
+                </div>
+            ) : (
+                <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-800 border border-blue-100 bg-blue-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
+                    <User size={18} /> Entrar
+                </Link>
+            )
           )}
         </nav>
       </div>

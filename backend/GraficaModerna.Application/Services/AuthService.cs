@@ -27,7 +27,8 @@ public class AuthService : IAuthService
         {
             UserName = dto.Email,
             Email = dto.Email,
-            FullName = dto.FullName
+            FullName = dto.FullName,
+            PhoneNumber = dto.PhoneNumber // Mapeamento do Telefone
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);
@@ -51,10 +52,8 @@ public class AuthService : IAuthService
         return GenerateToken(user);
     }
 
-    // Método corrigido para diferenciar Admin de User
     private AuthResponseDto GenerateToken(ApplicationUser user)
     {
-        // Verifica se é o admin definido no appsettings (ou fallback)
         var adminEmail = _configuration["AdminSettings:Email"] ?? "admin@graficamoderna.com";
         var role = user.Email!.Equals(adminEmail, StringComparison.OrdinalIgnoreCase) ? "Admin" : "User";
 
@@ -63,7 +62,7 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email!),
             new Claim(ClaimTypes.Name, user.FullName),
-            new Claim(ClaimTypes.Role, role) // Claim de Role dinâmica
+            new Claim(ClaimTypes.Role, role)
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));

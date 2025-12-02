@@ -39,13 +39,18 @@ export const CartService = {
     return response.data;
   },
 
+  // NOVO: Solicitar Reembolso
+  requestRefund: async (orderId) => {
+    const response = await api.post(`/orders/${orderId}/request-refund`);
+    return response.data;
+  },
+
   // --- Admin: Gestão de Pedidos ---
   getAllOrders: async () => {
     const response = await api.get('/orders/admin/all');
     return response.data;
   },
 
-  // ATUALIZADO: Aceita trackingCode
   updateOrderStatus: async (orderId, newStatus, trackingCode = null) => {
     await api.patch(`/orders/${orderId}/status`, { status: newStatus, trackingCode });
   }

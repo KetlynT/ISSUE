@@ -1,62 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
-import { CartService } from '../services/cartService';
+import { useCart } from '../context/CartContext'; // Usamos o estado global agora
 import { CouponService } from '../services/couponService';
-import { ShippingService } from '../services/shippingService'; // Importar Shipping
+import { ShippingService } from '../services/shippingService';
 import { Button } from '../components/ui/Button';
 import { Trash2, ShoppingBag, ArrowRight, Tag, Truck, Plus, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { AuthService } from '../services/authService';
 
 export const Cart = () => {
-  const { cartCount, fetchCartCount, updateQuantity } = useCart();
+  // Pega itens e funções do Contexto, não mais load manual
+  const { cartItems, updateQuantity, removeFromCart } = useCart();
   const navigate = useNavigate();
 
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  // Lógica de Cupom
+  // Estados locais apenas para features da página
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponLoading, setCouponLoading] = useState(false);
 
-  // Lógica de Frete
   const [cep, setCep] = useState('');
   const [shippingOptions, setShippingOptions] = useState(null);
-  const [selectedShipping, setSelectedShipping] = useState(null); // Opção de frete escolhida
+  const [selectedShipping, setSelectedShipping] = useState(null);
   const [shippingLoading, setShippingLoading] = useState(false);
 
-  useEffect(() => {
-    loadCart();
-  }, [cartCount]); // Recarrega se o contador global mudar
-
-  const loadCart = async () => {
-    try {
-        const data = await CartService.getCart();
-        setItems(data.items);
-    } catch (e) {
-        console.error(e);
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  const handleUpdateQuantity = async (itemId, newQty) => {
+  const handleUpdateQuantity = async (productId, currentQty, delta) => {
+    const newQty = currentQty + delta;
     if (newQty < 1) return;
-    const success = await updateQuantity(itemId, newQty);
-    if(success) {
-        // Atualiza localmente para feedback instantâneo
-        setItems(prev => prev.map(i => i.id === itemId ? {...i, quantity: newQty, totalPrice: i.unitPrice * newQty} : i));
-        // Se mudou quantidade, o frete calculado anteriormente pode estar errado, ideal resetar ou recalcular
-        if (shippingOptions) handleCalculateShipping(); 
-    }
-  };
-
-  const handleRemove = async (itemId) => {
-    await CartService.removeItem(itemId);
-    setItems(prev => prev.filter(i => i.id !== itemId));
-    fetchCartCount();
-    if(items.length <= 1) {
+    await updateQuantity(productId, newQty);
+    // Limpa frete pois peso mudou
+    if (shippingOptions) {
         setShippingOptions(null);
         setSelectedShipping(null);
     }
@@ -68,10 +40,10 @@ export const Cart = () => {
     try {
       const data = await CouponService.validate(couponCode);
       setAppliedCoupon(data);
-      toast.success(`Cupom ${data.code} aplicado! ${data.discountPercentage}% OFF`);
+      toast.success(`Cupom aplicado: ${data.discountPercentage}% OFF`);
     } catch (error) {
       setAppliedCoupon(null);
-      toast.error("Cupom inválido ou expirado.");
+      toast.error("Cupom inválido.");
     } finally {
       setCouponLoading(false);
     }
@@ -86,8 +58,7 @@ export const Cart = () => {
     
     setShippingLoading(true);
     try {
-        // Prepara os itens para a API de frete
-        const shippingItems = items.map(i => ({
+        const shippingItems = cartItems.map(i => ({
             weight: i.weight,
             width: i.width,
             height: i.height,
@@ -97,8 +68,7 @@ export const Cart = () => {
 
         const options = await ShippingService.calculate(cep, shippingItems);
         setShippingOptions(options);
-        // Seleciona a primeira opção automaticamente se não houver selecionada
-        if(options.length > 0 && !selectedShipping) setSelectedShipping(options[0]);
+        if(options.length > 0) setSelectedShipping(options[0]);
     } catch (error) {
         toast.error("Erro ao calcular frete");
     } finally {
@@ -107,28 +77,28 @@ export const Cart = () => {
   };
 
   const handleCheckout = () => {
-    if (!selectedShipping && items.length > 0) {
-        toast.error("Por favor, calcule e selecione o frete antes de continuar.");
+    if (!AuthService.isAuthenticated()) {
+        // Redireciona para Login com intenção de voltar
+        toast("Faça login para finalizar a compra.");
+        navigate('/login');
         return;
     }
 
-    // Passamos o cupom E o frete via state
-    // Nota: O backend atual calcula o frete novamente ou salva? 
-    // Como o backend atual não salva o frete no banco (Order), vamos considerar 
-    // que o valor total será ajustado visualmente, mas num cenário real o backend deveria receber o valor do frete.
+    if (!selectedShipping && cartItems.length > 0) {
+        toast.error("Selecione o frete antes de continuar.");
+        return;
+    }
+
     navigate('/checkout', { state: { coupon: appliedCoupon } });
   };
 
-  // Cálculos de Totais
-  const subTotal = items.reduce((acc, i) => acc + i.totalPrice, 0);
+  // Cálculos
+  const subTotal = cartItems.reduce((acc, i) => acc + i.totalPrice, 0);
   const discountAmount = appliedCoupon ? subTotal * (appliedCoupon.discountPercentage / 100) : 0;
   const shippingCost = selectedShipping ? selectedShipping.price : 0;
-  
   const total = subTotal - discountAmount + shippingCost;
 
-  if (loading) return <div className="text-center py-20">Carregando carrinho...</div>;
-
-  if (items.length === 0) {
+  if (cartItems.length === 0) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
         <div className="bg-gray-100 p-6 rounded-full mb-4">
@@ -159,8 +129,8 @@ export const Cart = () => {
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                {items.map((item) => (
-                    <tr key={item.id}>
+                {cartItems.map((item) => (
+                    <tr key={item.productId}>
                     <td className="p-4">
                         <div className="flex items-center gap-4">
                         {item.productImage && <img src={item.productImage} className="w-16 h-16 object-cover rounded border" />}
@@ -173,7 +143,7 @@ export const Cart = () => {
                     <td className="p-4">
                         <div className="flex items-center justify-center border rounded-lg w-fit mx-auto">
                             <button 
-                                onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                                onClick={() => handleUpdateQuantity(item.productId, item.quantity, -1)}
                                 className="px-3 py-1 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
                                 disabled={item.quantity <= 1}
                             >
@@ -181,7 +151,7 @@ export const Cart = () => {
                             </button>
                             <span className="px-2 font-medium text-sm w-8 text-center">{item.quantity}</span>
                             <button 
-                                onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                                onClick={() => handleUpdateQuantity(item.productId, item.quantity, 1)}
                                 className="px-3 py-1 text-gray-600 hover:bg-gray-100"
                             >
                                 <Plus size={14} />
@@ -190,7 +160,7 @@ export const Cart = () => {
                     </td>
                     <td className="p-4 text-right font-bold text-blue-600">R$ {item.totalPrice.toFixed(2)}</td>
                     <td className="p-4 text-right">
-                        <button onClick={() => handleRemove(item.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-full"><Trash2 size={18} /></button>
+                        <button onClick={() => removeFromCart(item.productId)} className="text-red-500 hover:bg-red-50 p-2 rounded-full"><Trash2 size={18} /></button>
                     </td>
                     </tr>
                 ))}
@@ -198,16 +168,13 @@ export const Cart = () => {
             </table>
             </div>
 
-            {/* Calculadora de Frete no Carrinho */}
+            {/* Frete */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Truck size={18}/> Calcular Frete</h3>
                 <form onSubmit={handleCalculateShipping} className="flex gap-2 max-w-sm mb-4">
                     <input 
                         className="flex-1 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="CEP de Entrega"
-                        value={cep}
-                        onChange={e => setCep(e.target.value)}
-                        maxLength={9}
+                        placeholder="CEP de Entrega" value={cep} onChange={e => setCep(e.target.value)} maxLength={9}
                     />
                     <Button type="submit" isLoading={shippingLoading} size="sm" className="bg-gray-800 hover:bg-gray-900">Calcular</Button>
                 </form>
@@ -217,13 +184,7 @@ export const Cart = () => {
                         {shippingOptions.map((opt, idx) => (
                             <label key={idx} className={`flex justify-between items-center p-3 rounded border cursor-pointer transition-colors ${selectedShipping?.name === opt.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}>
                                 <div className="flex items-center gap-3">
-                                    <input 
-                                        type="radio" 
-                                        name="shipping" 
-                                        checked={selectedShipping?.name === opt.name}
-                                        onChange={() => setSelectedShipping(opt)}
-                                        className="text-blue-600"
-                                    />
+                                    <input type="radio" name="shipping" checked={selectedShipping?.name === opt.name} onChange={() => setSelectedShipping(opt)} className="text-blue-600"/>
                                     <div>
                                         <div className="font-bold text-sm text-gray-800">{opt.name}</div>
                                         <div className="text-xs text-gray-500">até {opt.deliveryDays} dias úteis</div>
@@ -238,59 +199,28 @@ export const Cart = () => {
         </div>
 
         <div className="h-fit space-y-6">
-          {/* Cupom */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Tag size={18}/> Cupom de Desconto</h3>
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Tag size={18}/> Cupom</h3>
             <div className="flex gap-2">
-                <input 
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                    placeholder="CÓDIGO"
-                    value={couponCode}
-                    onChange={e => setCouponCode(e.target.value)}
-                />
+                <input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="CÓDIGO" value={couponCode} onChange={e => setCouponCode(e.target.value)}/>
                 <Button onClick={handleApplyCoupon} isLoading={couponLoading} size="sm">Aplicar</Button>
             </div>
-            {appliedCoupon && (
-                <div className="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200 text-center">
-                    Cupom <b>{appliedCoupon.code}</b> aplicado: -{appliedCoupon.discountPercentage}%
-                </div>
-            )}
+            {appliedCoupon && <div className="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200 text-center">Cupom <b>{appliedCoupon.code}</b> aplicado!</div>}
           </div>
 
-          {/* Resumo */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="font-bold text-lg text-gray-800 mb-4 border-b pb-2">Resumo do Pedido</h3>
-            
+            <h3 className="font-bold text-lg text-gray-800 mb-4 border-b pb-2">Resumo</h3>
             <div className="space-y-2 text-sm text-gray-600 mb-4">
-                <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subTotal)}</span>
-                </div>
-                
-                {selectedShipping && (
-                    <div className="flex justify-between">
-                        <span>Frete</span>
-                        <span>+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(shippingCost)}</span>
-                    </div>
-                )}
-
-                {appliedCoupon && (
-                    <div className="flex justify-between text-green-600 font-medium">
-                        <span>Desconto</span>
-                        <span>- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountAmount)}</span>
-                    </div>
-                )}
+                <div className="flex justify-between"><span>Subtotal</span><span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subTotal)}</span></div>
+                {selectedShipping && <div className="flex justify-between"><span>Frete</span><span>+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(shippingCost)}</span></div>}
+                {appliedCoupon && <div className="flex justify-between text-green-600 font-medium"><span>Desconto</span><span>- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountAmount)}</span></div>}
             </div>
-
             <div className="flex justify-between items-center text-lg font-bold text-gray-900 mt-4 pt-4 border-t border-gray-100 mb-6">
               <span>Total</span>
-              <span className="text-2xl text-blue-600">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}
-              </span>
+              <span className="text-2xl text-blue-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
             </div>
-            
             <Button onClick={handleCheckout} className="w-full py-4 text-lg" variant="success">
-              Finalizar Compra <ArrowRight size={20} />
+                {AuthService.isAuthenticated() ? 'Finalizar Compra' : 'Login para Finalizar'} <ArrowRight size={20} />
             </Button>
           </div>
         </div>
