@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
 import { ShippingService } from '../services/shippingService';
 import { useCart } from '../context/CartContext';
-import { AuthService } from '../services/authService'; // Importar Auth
+import { AuthService } from '../services/authService';
 import { Truck, ShoppingCart, MessageSquare, Plus, Minus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
@@ -13,6 +13,9 @@ export const ProductDetails = () => {
   const { addToCart } = useCart();
   
   const [product, setProduct] = useState(null);
+  // Estado local para gerenciar a imagem e evitar piscadas
+  const [imgSrc, setImgSrc] = useState('');
+  
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -35,6 +38,7 @@ export const ProductDetails = () => {
              ContentService.getSettings()
         ]);
         setProduct(prod);
+        setImgSrc(prod.imageUrl); // Inicializa a imagem
         if (settings && settings.whatsapp_number) {
             setWhatsappNumber(settings.whatsapp_number);
         }
@@ -78,9 +82,11 @@ export const ProductDetails = () => {
     window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const handleImageError = (e) => {
-    e.target.src = 'https://via.placeholder.com/600x400?text=Sem+Imagem';
-    e.target.onerror = null;
+  const handleImageError = () => {
+    const fallbackUrl = 'https://via.placeholder.com/600x400?text=Sem+Imagem';
+    if (imgSrc !== fallbackUrl) {
+      setImgSrc(fallbackUrl);
+    }
   };
 
   if (loading) return <div className="text-center py-20">Carregando...</div>;
@@ -95,7 +101,7 @@ export const ProductDetails = () => {
         {/* Coluna Esquerda: Imagem */}
         <div className="md:w-1/2 h-96 md:h-auto bg-gray-100 relative group">
           <img 
-            src={product.imageUrl} 
+            src={imgSrc} 
             alt={product.name} 
             onError={handleImageError}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"

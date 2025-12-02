@@ -12,6 +12,9 @@ export const Home = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalItems: 0 });
   const [loading, setLoading] = useState(true);
   
+  // Estado para controle de "primeiro carregamento" para evitar piscada
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  
   // Estado para Input de Página Manual
   const [inputPage, setInputPage] = useState(1);
 
@@ -65,6 +68,7 @@ export const Home = () => {
       console.error("Erro ao carregar catálogo:", error);
     } finally {
       setLoading(false);
+      setIsFirstLoad(false); // Marca que o primeiro load já ocorreu
     }
   };
 
@@ -165,66 +169,71 @@ export const Home = () => {
           </div>
         </div>
 
-        {/* Grid de Produtos */}
-        {loading ? (
+        {/* LÓGICA DE RENDERIZAÇÃO CORRIGIDA: Evita remover o grid se já existirem produtos */}
+        {loading && isFirstLoad ? (
           <div className="text-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
             <p className="text-gray-500">Carregando catálogo...</p>
           </div>
-        ) : products.length > 0 ? (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {products.map((prod) => (
-                <ProductCard 
-                  key={prod.id} 
-                  product={prod} 
-                />
-              ))}
-            </div>
-
-            {/* Paginação Melhorada com Input */}
-            {pagination.totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-16">
-                    <Button 
-                        variant="outline" 
-                        className="text-gray-600 border-gray-300 hover:bg-gray-50"
-                        onClick={() => handlePageChange(pagination.page - 1)}
-                        disabled={pagination.page === 1}
-                    >
-                        <ChevronLeft size={20} /> Anterior
-                    </Button>
-                    
-                    <form onSubmit={handleManualPageSubmit} className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
-                        <span className="text-gray-600 text-sm font-medium">Página</span>
-                        <input 
-                            type="number" 
-                            min="1" 
-                            max={pagination.totalPages}
-                            value={inputPage}
-                            onChange={(e) => setInputPage(e.target.value)}
-                            onBlur={() => handlePageChange(parseInt(inputPage) || 1)}
-                            className="w-12 text-center border border-gray-300 rounded p-1 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800"
-                        />
-                        <span className="text-gray-400 text-sm">de {pagination.totalPages}</span>
-                    </form>
-
-                    <Button 
-                        variant="outline"
-                        className="text-gray-600 border-gray-300 hover:bg-gray-50" 
-                        onClick={() => handlePageChange(pagination.page + 1)}
-                        disabled={pagination.page === pagination.totalPages}
-                    >
-                        Próximo <ChevronRight size={20} />
-                    </Button>
-                </div>
-            )}
-          </>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-center">
-            <p className="text-gray-500 text-lg mb-4">Nenhum produto encontrado com estes filtros.</p>
-            <Button variant="ghost" className="text-blue-600" onClick={() => {setSearchTerm(''); setSortOption('');}}>
-                Limpar Filtros
-            </Button>
+          <div className={`transition-opacity duration-300 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+            {products.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                  {products.map((prod) => (
+                    <ProductCard 
+                      key={prod.id} 
+                      product={prod} 
+                    />
+                  ))}
+                </div>
+
+                {/* Paginação */}
+                {pagination.totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-16">
+                        <Button 
+                            variant="outline" 
+                            className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                            onClick={() => handlePageChange(pagination.page - 1)}
+                            disabled={pagination.page === 1 || loading}
+                        >
+                            <ChevronLeft size={20} /> Anterior
+                        </Button>
+                        
+                        <form onSubmit={handleManualPageSubmit} className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
+                            <span className="text-gray-600 text-sm font-medium">Página</span>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max={pagination.totalPages}
+                                value={inputPage}
+                                onChange={(e) => setInputPage(e.target.value)}
+                                onBlur={() => handlePageChange(parseInt(inputPage) || 1)}
+                                className="w-12 text-center border border-gray-300 rounded p-1 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-bold text-gray-800"
+                                disabled={loading}
+                            />
+                            <span className="text-gray-400 text-sm">de {pagination.totalPages}</span>
+                        </form>
+
+                        <Button 
+                            variant="outline"
+                            className="text-gray-600 border-gray-300 hover:bg-gray-50" 
+                            onClick={() => handlePageChange(pagination.page + 1)}
+                            disabled={pagination.page === pagination.totalPages || loading}
+                        >
+                            Próximo <ChevronRight size={20} />
+                        </Button>
+                    </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 text-center">
+                <p className="text-gray-500 text-lg mb-4">Nenhum produto encontrado com estes filtros.</p>
+                <Button variant="ghost" className="text-blue-600" onClick={() => {setSearchTerm(''); setSortOption('');}}>
+                    Limpar Filtros
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </section>

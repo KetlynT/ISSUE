@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingCart, Search } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useCart } from '../context/CartContext';
-import { AuthService } from '../services/authService'; // Importar Auth
+import { AuthService } from '../services/authService';
 
 export const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
+  const [imgSrc, setImgSrc] = useState(product.imageUrl);
+
+  // Atualiza a imagem se o produto mudar (ex: paginação)
+  useEffect(() => {
+    setImgSrc(product.imageUrl);
+  }, [product.imageUrl]);
 
   // Verifica se é admin
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -22,9 +28,12 @@ export const ProductCard = ({ product }) => {
     addToCart(product.id, 1);
   };
 
-  const handleImageError = (e) => {
-    e.target.src = 'https://via.placeholder.com/400x300?text=Sem+Imagem';
-    e.target.onerror = null;
+  const handleImageError = () => {
+    // Define a imagem de fallback apenas se ainda não estiver definida
+    const fallbackUrl = 'https://via.placeholder.com/400x300?text=Sem+Imagem';
+    if (imgSrc !== fallbackUrl) {
+      setImgSrc(fallbackUrl);
+    }
   };
 
   return (
@@ -38,7 +47,7 @@ export const ProductCard = ({ product }) => {
       {/* Imagem com Overlay */}
       <div className="relative h-64 overflow-hidden bg-gray-50">
         <img 
-          src={product.imageUrl} 
+          src={imgSrc} 
           alt={product.name} 
           onError={handleImageError}
           className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" 
