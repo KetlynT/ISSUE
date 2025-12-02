@@ -83,7 +83,7 @@ export const ProductDetails = () => {
   };
 
   const handleImageError = () => {
-    const fallbackUrl = 'https://via.placeholder.com/600x400?text=Sem+Imagem';
+    const fallbackUrl = 'https://placehold.co/600x400?text=Sem+Imagem';
     if (imgSrc !== fallbackUrl) {
       setImgSrc(fallbackUrl);
     }

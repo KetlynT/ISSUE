@@ -2,7 +2,7 @@ using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting; // Necessário para o atributo
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace GraficaModerna.API.Controllers;
@@ -18,23 +18,32 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
-    // APLICAÇÃO DA SEGURANÇA: Limita a 5 tentativas por minuto
     [EnableRateLimiting("AuthPolicy")]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto dto)
     {
-        return Ok(await _authService.RegisterAsync(dto));
+        var result = await _authService.RegisterAsync(dto);
+        SetTokenCookie(result.Token);
+        // Retorna apenas dados não sensíveis
+        return Ok(new { result.Email, result.Role });
     }
 
-    // APLICAÇÃO DA SEGURANÇA: Limita a 5 tentativas por minuto
     [EnableRateLimiting("AuthPolicy")]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
     {
-        return Ok(await _authService.LoginAsync(dto));
+        var result = await _authService.LoginAsync(dto);
+        SetTokenCookie(result.Token);
+        return Ok(new { result.Email, result.Role });
     }
 
-    // --- PERFIL DO CLIENTE (Não precisa de limitação estrita, usa a global) ---
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        // Remove o cookie do navegador
+        Response.Cookies.Delete("jwt");
+        return Ok(new { message = "Deslogado com sucesso" });
+    }
 
     [HttpGet("profile")]
     [Authorize(Roles = "User")]
@@ -51,5 +60,18 @@ public class AuthController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         await _authService.UpdateProfileAsync(userId!, dto);
         return NoContent();
+    }
+
+    // --- MÁGICA DE SEGURANÇA: Cria o Cookie HttpOnly ---
+    private void SetTokenCookie(string token)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true, // JavaScript não consegue ler (Anti-XSS)
+            Secure = true,   // Só trafega em HTTPS (Anti-Sniffing)
+            SameSite = SameSiteMode.Strict, // Previne CSRF
+            Expires = DateTime.UtcNow.AddHours(8)
+        };
+        Response.Cookies.Append("jwt", token, cookieOptions);
     }
 }

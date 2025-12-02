@@ -30,7 +30,7 @@ export const ProductCard = ({ product }) => {
 
   const handleImageError = () => {
     // Define a imagem de fallback apenas se ainda não estiver definida
-    const fallbackUrl = 'https://via.placeholder.com/400x300?text=Sem+Imagem';
+    const fallbackUrl = 'https://placehold.co/400x300?text=Sem+Imagem';
     if (imgSrc !== fallbackUrl) {
       setImgSrc(fallbackUrl);
     }

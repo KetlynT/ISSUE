@@ -1,28 +1,16 @@
 import api from './api';
-import { AuthService } from './authService';
 
-api.interceptors.request.use(config => {
-  const token = AuthService.getToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Interceptor removido daqui pois api.js já resolve autenticação via Cookie
 
 export const ProductService = {
-  // Atualizado para receber parâmetros de paginação e filtro
   getAll: async (page = 1, pageSize = 8, search = '', sort = '', order = '') => {
-    const params = new URLSearchParams({
-      page,
-      pageSize,
-    });
-    
+    const params = new URLSearchParams({ page, pageSize });
     if (search) params.append('search', search);
     if (sort) params.append('sort', sort);
     if (order) params.append('order', order);
 
     const response = await api.get(`/products?${params.toString()}`);
-    return response.data; // Retorna { items, totalItems, page, totalPages, pageSize }
+    return response.data;
   },
 
   getById: async (id) => {
@@ -48,9 +36,7 @@ export const ProductService = {
     formData.append('file', file);
     
     const response = await api.post('/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data.url;
   }
