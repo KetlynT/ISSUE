@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ContentService } from '../services/contentService';
 import { motion } from 'framer-motion';
-import DOMPurify from 'dompurify';
+import DOMPurify from 'dompurify'; // Importação essencial para segurança
 
 export const GenericPage = () => {
   const { slug } = useParams();
@@ -41,6 +41,13 @@ export const GenericPage = () => {
 
   if (!page) return null;
 
+  // CONFIGURAÇÃO DE SEGURANÇA DO DOMPURIFY
+  // Permite apenas tags e atributos seguros, bloqueando XSS
+  const sanitizedContent = DOMPurify.sanitize(page.content, {
+    USE_PROFILES: { html: true }, // Garante perfil HTML padrão
+    ADD_ATTR: ['target'] // Permite target="_blank" em links se necessário
+  });
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -49,9 +56,10 @@ export const GenericPage = () => {
     >
       <h1 className="text-4xl font-bold text-gray-900 mb-8 border-b pb-4">{page.title}</h1>
       
+      {/* SEGURANÇA: Renderização segura do HTML sanitizado */}
       <div 
         className="prose prose-lg prose-blue text-gray-600 max-w-none"
-        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }} 
+        dangerouslySetInnerHTML={{ __html: sanitizedContent }} 
       />
     </motion.div>
   );

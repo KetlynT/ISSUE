@@ -1,6 +1,6 @@
 ﻿using GraficaModerna.Domain.Entities;
 using GraficaModerna.Infrastructure.Context;
-using Ganss.Xss; // Importar Sanitizador
+using Ganss.Xss; // Necessário: Pacote HtmlSanitizer
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +12,7 @@ namespace GraficaModerna.API.Controllers;
 public class ContentController : ControllerBase
 {
     private readonly AppDbContext _context;
-    private readonly IHtmlSanitizer _sanitizer; // Injetar Sanitizador
+    private readonly IHtmlSanitizer _sanitizer; // Injeção do Sanitizador
 
     public ContentController(AppDbContext context, IHtmlSanitizer sanitizer)
     {
@@ -23,7 +23,9 @@ public class ContentController : ControllerBase
     [HttpGet("pages")]
     public async Task<IActionResult> GetAllPages()
     {
-        return Ok(await _context.ContentPages.Select(p => new { p.Id, p.Slug, p.Title }).ToListAsync());
+        return Ok(await _context.ContentPages
+            .Select(p => new { p.Id, p.Slug, p.Title })
+            .ToListAsync());
     }
 
     [HttpGet("pages/{slug}")]
@@ -44,7 +46,9 @@ public class ContentController : ControllerBase
         if (page == null) return NotFound();
 
         page.Title = model.Title;
-        // SEGURANÇA: Limpa scripts maliciosos do HTML antes de salvar
+
+        // SEGURANÇA (ENTRADA): Remove scripts e eventos perigosos (ex: onclick, <script>)
+        // Isso impede que código malicioso seja sequer salvo no banco.
         page.Content = _sanitizer.Sanitize(model.Content);
 
         await _context.SaveChangesAsync();
@@ -69,8 +73,9 @@ public class ContentController : ControllerBase
         {
             var setting = dbSettings.FirstOrDefault(s => s.Key == kvp.Key);
 
-            // Simples sanitização para configurações de texto também (opcional, mas recomendado)
-            var cleanValue = kvp.Value;
+            // SEGURANÇA (ENTRADA): Sanitiza também as configurações do site
+            // Isso previne XSS caso alguém tente injetar scripts no título ou rodapé
+            var cleanValue = _sanitizer.Sanitize(kvp.Value);
 
             if (setting != null)
             {
