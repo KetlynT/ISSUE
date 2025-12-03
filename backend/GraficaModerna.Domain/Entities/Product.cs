@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace GraficaModerna.Domain.Entities;
 
 public class Product
@@ -16,8 +18,13 @@ public class Product
     public int Height { get; private set; }
     public int Length { get; private set; }
 
-    // NOVO: Estoque
+    // Estoque
     public int StockQuantity { get; private set; }
+
+    // SEGURANÇA: Concorrência Otimista
+    // O EF Core verifica automaticamente se esse valor mudou antes de salvar.
+    [Timestamp]
+    public byte[] RowVersion { get; set; }
 
     protected Product()
     {
@@ -39,7 +46,7 @@ public class Product
         Width = width;
         Height = height;
         Length = length;
-        StockQuantity = stockQuantity; // Inicializa estoque
+        StockQuantity = stockQuantity;
         IsActive = true;
         CreatedAt = DateTime.UtcNow;
     }

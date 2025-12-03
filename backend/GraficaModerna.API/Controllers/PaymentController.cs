@@ -1,41 +1,51 @@
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims; // Necessário para ler o Token
+using System.Security.Claims;
 
 namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(Roles = "User")] // Apenas Clientes podem executar pagamentos
+[Authorize(Roles = "User")]
 public class PaymentController : ControllerBase
 {
     private readonly IOrderService _orderService;
+    private readonly IConfiguration _configuration; // Injetar Configuração
 
-    public PaymentController(IOrderService orderService) { _orderService = orderService; }
+    public PaymentController(IOrderService orderService, IConfiguration configuration)
+    {
+        _orderService = orderService;
+        _configuration = configuration;
+    }
 
     [HttpPost("pay/{orderId}")]
     public async Task<IActionResult> SimulatePayment(Guid orderId)
     {
-        await Task.Delay(1000); // Simula processamento
+        // --- TRAVA DE SEGURANÇA (FEATURE FLAG) ---
+        // Se a configuração não existir ou for false, bloqueia.
+        var isDevMode = _configuration.GetValue<bool>("PaymentSettings:EnableDevPayment");
+
+        if (!isDevMode)
+        {
+            return StatusCode(403, new { message = "Pagamento manual desabilitado. Utilize o gateway de pagamento." });
+        }
+        // ------------------------------------------
+
+        await Task.Delay(1000);
         try
         {
-            // CORREÇÃO DE SEGURANÇA (IDOR):
-            // Obtém o ID do usuário diretamente do Token de autenticação.
-            // Isso impede que um usuário pague o pedido de outro.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized("Usuário não identificado.");
 
-            // Chama o novo método seguro no serviço
             await _orderService.PayOrderAsync(orderId, userId);
 
-            return Ok(new { message = "Aprovado!" });
+            return Ok(new { message = "Aprovado (Modo Simulação)!" });
         }
         catch (Exception ex)
         {
-            // Retorna 400 Bad Request se a validação de segurança falhar
             return BadRequest(new { message = ex.Message });
         }
     }

@@ -27,14 +27,14 @@ var builder = WebApplication.CreateBuilder(args);
 // --- 1. CONFIGURAÇÃO DE AMBIENTE ---
 builder.Configuration.AddEnvironmentVariables();
 
-var jwtKey = builder.Configuration["Jwt:Key"];
+// SEGURANÇA: A chave deve vir do Ambiente, não do arquivo JSON hardcoded.
+// Em produção: Defina a variável de ambiente 'JWT_SECRET_KEY'
+var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
 {
-    if (!builder.Environment.IsDevelopment())
-    {
-        throw new Exception("FATAL: A chave JWT (Jwt:Key) não está configurada ou é insegura.");
-    }
+    // Falha rápida se a segurança não estiver configurada
+    throw new Exception("FATAL: A chave JWT (JWT_SECRET_KEY) não está configurada ou é muito curta.");
 }
 
 // --- 2. INFRAESTRUTURA ---
@@ -52,7 +52,7 @@ builder.Services.AddResponseCompression(options =>
     options.Providers.Add<GzipCompressionProvider>();
 });
 
-// Rate Limiting
+// Rate Limiting (Proteção contra DDOS / Brute Force)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -87,7 +87,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = false; // Em produção deve ser TRUE
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -101,6 +101,7 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.Zero
     };
 
+    // Extrai o token do Cookie HttpOnly (Proteção XSS)
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
@@ -136,17 +137,17 @@ builder.Services.AddSwaggerGen(c => {
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", b => b
-        .WithOrigins("http://localhost:5173", "http://localhost:3000")
+        .WithOrigins("http://localhost:5173", "http://localhost:3000") // Origens permitidas
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .AllowCredentials());
+        .AllowCredentials()); // Permite Cookies
 });
 
 var app = builder.Build();
 
 // --- 4. PIPELINE DE EXECUÇÃO ---
 
-// Middleware de Headers de Segurança (NOVO)
+// Middleware de Headers de Segurança
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Frame-Options", "DENY"); // Previne Clickjacking

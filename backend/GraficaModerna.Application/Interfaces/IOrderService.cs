@@ -20,4 +20,5 @@ public interface IOrderService
 
     // Cliente solicita reembolso
     Task RequestRefundAsync(Guid orderId, string userId);
+    Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId); // NOVO: Método do Sistema (Prod)
 }

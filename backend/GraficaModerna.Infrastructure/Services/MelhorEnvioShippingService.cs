@@ -28,14 +28,14 @@ public class MelhorEnvioShippingService : IShippingService
         var baseUrl = _configuration["MelhorEnvio:BaseUrl"];
         var userAgent = _configuration["MelhorEnvio:UserAgent"];
 
-        // SEGURANÇA: Prioriza a variável de ambiente do servidor.
-        // Se não existir (dev), tenta o appsettings.json, mas o ideal é nunca ter o token lá.
-        var token = Environment.GetEnvironmentVariable("MELHOR_ENVIO_TOKEN")
-                    ?? _configuration["MelhorEnvio:Token"];
+        // SEGURANÇA: O Token JAMAIS deve vir do appsettings em produção.
+        // Ele deve ser injetado via Environment Variable do servidor (ex: Azure App Service, Docker, AWS).
+        var token = Environment.GetEnvironmentVariable("MELHOR_ENVIO_TOKEN");
 
+        // Fallback apenas para desenvolvimento local se necessário, mas desencorajado.
         if (string.IsNullOrEmpty(token))
         {
-            // Logar erro silenciosamente ou retornar lista vazia
+            // Log de aviso: Token não encontrado nas variáveis de ambiente
             return new List<ShippingOptionDto>();
         }
 
@@ -48,6 +48,8 @@ public class MelhorEnvioShippingService : IShippingService
             to = new { postal_code = destinationCep.Replace("-", "") },
             products = items.Select(i => new
             {
+                // SEGURANÇA: O Controller já validou que esses dados vieram do banco de dados,
+                // e não do input do usuário, prevenindo Parameter Tampering.
                 width = i.Width,
                 height = i.Height,
                 length = i.Length,
