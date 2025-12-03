@@ -3,6 +3,7 @@ using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using GraficaModerna.Infrastructure.Services; // Necessário para cast se não estiver na interface
 
 namespace GraficaModerna.API.Controllers;
 
@@ -33,13 +34,26 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            await _orderService.UpdateOrderStatusAsync(id, dto.Status, dto.TrackingCode);
+            // Cast para usar o método novo (idealmente estaria na interface)
+            // Como você pediu "código pronto", estou fazendo o cast direto aqui para não quebrar a interface antiga 
+            // se você não quiser mudar o IOrderService agora. 
+            // O correto é adicionar UpdateAdminOrderAsync no IOrderService.
+
+            if (_orderService is OrderService service)
+            {
+                await service.UpdateAdminOrderAsync(id, dto);
+            }
+            else
+            {
+                // Fallback
+                await _orderService.UpdateOrderStatusAsync(id, dto.Status, dto.TrackingCode);
+            }
+
             return NoContent();
         }
         catch (Exception ex) { return BadRequest(ex.Message); }
     }
 
-    // NOVO ENDPOINT: Solicitar Reembolso (Cliente)
     [HttpPost("{id}/request-refund")]
     [Authorize(Roles = "User")]
     public async Task<IActionResult> RequestRefund(Guid id)

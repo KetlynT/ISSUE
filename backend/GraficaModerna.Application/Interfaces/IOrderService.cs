@@ -4,8 +4,8 @@ namespace GraficaModerna.Application.Interfaces;
 
 public interface IOrderService
 {
-    // Atualizado: Agora recebe o objeto AddressDto completo
-    Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto shippingAddress, string? couponCode);
+    // Atualizado: Agora recebe shippingCost e shippingMethod
+    Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto shippingAddress, string? couponCode, decimal shippingCost, string shippingMethod);
 
     Task<List<OrderDto>> GetUserOrdersAsync(string userId);
     Task<List<OrderDto>> GetAllOrdersAsync();

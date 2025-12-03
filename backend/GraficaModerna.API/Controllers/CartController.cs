@@ -62,16 +62,23 @@ public class CartController : ControllerBase
     {
         try
         {
-            // Valida se o endereço foi enviado corretamente
             if (string.IsNullOrEmpty(request.Address.ZipCode) || string.IsNullOrEmpty(request.Address.Street))
-                return BadRequest("Endereço de entrega inválido ou incompleto.");
+                return BadRequest("Endereço de entrega inválido.");
 
-            var order = await _orderService.CreateOrderFromCartAsync(GetUserId(), request.Address, request.CouponCode);
+            // CORREÇÃO: Passa o frete para o serviço
+            var order = await _orderService.CreateOrderFromCartAsync(
+                GetUserId(),
+                request.Address,
+                request.CouponCode,
+                request.ShippingCost,
+                request.ShippingMethod
+            );
+
             return Ok(order);
         }
         catch (Exception ex) { return BadRequest(ex.Message); }
     }
 }
 
-// O Address agora é um objeto completo, não apenas uma string
-public record CheckoutRequest(CreateAddressDto Address, string? CouponCode);
+// Atualizamos o DTO para incluir o frete
+public record CheckoutRequest(CreateAddressDto Address, string? CouponCode, decimal ShippingCost, string ShippingMethod);

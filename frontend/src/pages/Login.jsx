@@ -1,64 +1,56 @@
 import React, { useState } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom'; // Add useLocation
+import { useNavigate, Link, useLocation } from 'react-router-dom'; 
 import { AuthService } from '../services/authService';
 import { useCart } from '../context/CartContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
-  const location = useLocation(); // Hook para ler o estado da navegação
+  const location = useLocation();
   const { syncGuestCart } = useCart();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
     
     try {
       const data = await AuthService.login(email, password);
       
+      // SEGURANÇA: Se for Admin, desloga e avisa
       if (data.role === 'Admin') {
           await AuthService.logout();
-          setError('Acesso negado. Use o portal administrativo.');
+          toast.error("Acesso negado. Administradores devem usar a URL segura.", { duration: 5000, icon: <AlertCircle/> });
           setLoading(false);
           return;
       }
       
+      // Fluxo Cliente Normal
       await syncGuestCart();
-      
-      // LÓGICA DE REDIRECIONAMENTO CORRIGIDA:
-      // Se houver um "from" no estado, vai para lá. Senão, vai para Home.
       const from = location.state?.from || '/';
-      
-      // Se veio do carrinho, mandamos para o carrinho para ele clicar em checkout de novo
-      // (Ou poderíamos mandar direto para checkout se o carrinho não estiver vazio)
       navigate(from, { replace: true }); 
       
     } catch (err) {
-      setError('Credenciais inválidas.');
+      toast.error('Email ou senha incorretos.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    // ... (Resto do JSX do Login igual ao anterior)
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-100 p-8">
         <div className="text-center mb-8">
             <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <LogIn size={32} className="text-blue-600" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">Acesse sua Conta</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Área do Cliente</h2>
             <p className="text-gray-500 text-sm">Bem-vindo de volta!</p>
         </div>
-        
-        {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm text-center border border-red-100">{error}</div>}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -69,7 +61,6 @@ export const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="seu@email.com"
             />
           </div>
           <div>
@@ -80,7 +71,6 @@ export const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              placeholder="••••••"
             />
           </div>
           <button 

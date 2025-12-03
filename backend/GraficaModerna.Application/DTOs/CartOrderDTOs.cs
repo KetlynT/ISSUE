@@ -25,14 +25,23 @@ public record CartDto(Guid Id, List<CartItemDto> Items, decimal GrandTotal);
 public record OrderDto(
     Guid Id,
     DateTime OrderDate,
+    DateTime? DeliveryDate,
     decimal TotalAmount,
     string Status,
-    string? TrackingCode, // NOVO
+    string? TrackingCode,
+    // NOVOS CAMPOS DE VISUALIZAÇÃO
+    string? ReverseLogisticsCode,
+    string? ReturnInstructions,
     string ShippingAddress,
     List<OrderItemDto> Items
 );
 
 public record OrderItemDto(string ProductName, int Quantity, decimal UnitPrice, decimal Total);
 
-// NOVO: DTO para atualização de status com rastreio
-public record UpdateOrderStatusDto(string Status, string? TrackingCode);
+// DTO DE ATUALIZAÇÃO DO ADMIN
+public record UpdateOrderStatusDto(
+    string Status,
+    string? TrackingCode,
+    string? ReverseLogisticsCode, // Admin pode enviar isso agora
+    string? ReturnInstructions    // E isso
+);

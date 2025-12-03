@@ -8,7 +8,6 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado do Modal de Formulário (Interno do Manager)
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
   const [addressForm, setAddressForm] = useState(initialAddressState());
@@ -22,7 +21,7 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
       setLoading(true);
       const data = await AddressService.getAll();
       setAddresses(data);
-      if (onUpdate) onUpdate(data); // Avisa o pai que atualizou
+      if (onUpdate) onUpdate(data); 
     } catch (error) {
       toast.error("Erro ao carregar endereços.");
     } finally {
@@ -46,6 +45,19 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
       isDefault: false
     };
   }
+
+  // MÁSCARAS
+  const formatCEP = (value) => {
+    return value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').slice(0, 9);
+  };
+
+  const formatPhone = (value) => {
+    const v = value.replace(/\D/g, '');
+    if (v.length > 10) return v.replace(/^(\d{2})(\d{5})(\d{4}).*/, '($1) $2-$3');
+    if (v.length > 5) return v.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3');
+    if (v.length > 2) return v.replace(/^(\d{2})(\d{0,5}).*/, '($1) $2');
+    return v;
+  };
 
   const handleOpenForm = (address = null) => {
     if (address) {
@@ -86,7 +98,6 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
     }
   };
 
-  // Busca CEP automático
   const handleCepBlur = async () => {
     if (addressForm.zipCode.length >= 8) {
       try {
@@ -155,13 +166,26 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
             </div>
             
             <form onSubmit={handleSaveAddress} className="p-5 space-y-3">
-              {/* Campos do Formulário */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Nome (Ex: Casa)</label><input className="input-base" required value={addressForm.name} onChange={e => setAddressForm({...addressForm, name: e.target.value})} /></div>
                 <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Quem recebe?</label><input className="input-base" required value={addressForm.receiverName} onChange={e => setAddressForm({...addressForm, receiverName: e.target.value})} /></div>
                 
-                <div><label className="text-xs font-bold text-gray-500">CEP</label><input className="input-base" required maxLength={9} value={addressForm.zipCode} onChange={e => setAddressForm({...addressForm, zipCode: e.target.value})} onBlur={handleCepBlur}/></div>
-                <div><label className="text-xs font-bold text-gray-500">Telefone</label><input className="input-base" required value={addressForm.phoneNumber} onChange={e => setAddressForm({...addressForm, phoneNumber: e.target.value})} /></div>
+                {/* Campos com Máscara */}
+                <div>
+                    <label className="text-xs font-bold text-gray-500">CEP</label>
+                    <input className="input-base" required value={addressForm.zipCode} 
+                        onChange={e => setAddressForm({...addressForm, zipCode: formatCEP(e.target.value)})} 
+                        onBlur={handleCepBlur}
+                        maxLength={9}
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500">Telefone</label>
+                    <input className="input-base" required value={addressForm.phoneNumber} 
+                        onChange={e => setAddressForm({...addressForm, phoneNumber: formatPhone(e.target.value)})}
+                        maxLength={15}
+                    />
+                </div>
                 
                 <div className="col-span-2"><label className="text-xs font-bold text-gray-500">Rua</label><input className="input-base" required value={addressForm.street} onChange={e => setAddressForm({...addressForm, street: e.target.value})} /></div>
                 

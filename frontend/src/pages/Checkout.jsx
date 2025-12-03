@@ -72,10 +72,14 @@ export const Checkout = () => {
     setProcessing(true);
     try {
       const { id, userId, ...addressPayload } = selectedAddress; 
+      
       await CartService.checkout({
         address: addressPayload,
-        couponCode: coupon?.code 
+        couponCode: coupon?.code,
+        shippingCost: selectedShipping.price,   // CORREÇÃO: Envia o custo
+        shippingMethod: selectedShipping.name   // CORREÇÃO: Envia o nome
       });
+      
       toast.success("Pedido realizado!");
       await refreshCart();
       navigate('/meus-pedidos');
@@ -120,10 +124,8 @@ export const Checkout = () => {
                         <div key={addr.id} onClick={() => handleSelectAddress(addr)}
                             className={`cursor-pointer p-4 rounded-lg border-2 transition-all relative ${selectedAddress?.id === addr.id ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'border-gray-200 hover:border-blue-300 bg-white'}`}>
                             
-                            {/* CORREÇÃO DO ÍCONE AQUI */}
                             {selectedAddress?.id === addr.id && (
                                 <div className="absolute top-2 right-2">
-                                    {/* fill="currentColor" pega a cor da classe (blue-600) e color="white" deixa o traço branco */}
                                     <CheckCircle size={22} className="text-blue-600" fill="currentColor" color="white"/>
                                 </div>
                             )}

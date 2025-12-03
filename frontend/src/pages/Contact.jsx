@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Phone, MapPin, Send, Mail } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ContentService } from '../services/contentService';
+import toast from 'react-hot-toast';
 
 export const Contact = () => {
   const [settings, setSettings] = useState({
@@ -28,12 +29,12 @@ export const Contact = () => {
     if (honey) {
         // Simulamos sucesso para o bot não tentar de novo
         console.log("Bot detectado e bloqueado.");
-        alert("Mensagem enviada com sucesso!");
+        toast.success("Mensagem enviada com sucesso!");
         return;
     }
 
     // Simulação de envio real
-    alert("Mensagem enviada com sucesso!");
+    toast.success("Mensagem enviada com sucesso!");
   };
 
   return (

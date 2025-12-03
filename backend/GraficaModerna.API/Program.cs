@@ -29,17 +29,14 @@ if (builder.Environment.IsDevelopment())
     DotNetEnv.Env.Load();
 }
 
-// --- 1. CONFIGURAÇÃO DE AMBIENTE ---
 builder.Configuration.AddEnvironmentVariables();
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? builder.Configuration["Jwt:Key"];
-
 if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
 {
-    throw new Exception("FATAL: A chave JWT (JWT_SECRET_KEY) não está configurada ou é muito curta.");
+    throw new Exception("FATAL: A chave JWT não está configurada.");
 }
 
-// --- 2. INFRAESTRUTURA ---
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -77,7 +74,6 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// --- 3. AUTENTICAÇÃO SEGURA ---
 var key = Encoding.ASCII.GetBytes(jwtKey!);
 builder.Services.AddAuthentication(options =>
 {
@@ -113,18 +109,30 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Injeção de Dependências
+// --- INJEÇÃO DE DEPENDÊNCIA ---
+
+// 1. Repositórios e Unit of Work
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<ICartRepository, CartRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IAddressRepository, AddressRepository>();
+builder.Services.AddScoped<ICouponRepository, CouponRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+// 2. Serviços de Aplicação
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
-builder.Services.AddScoped<IAddressService, AddressService>(); // <--- NOVO REGISTRO DO SERVIÇO DE ENDEREÇOS
+builder.Services.AddScoped<IAddressService, AddressService>();
+
+// 3. Infraestrutura
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 builder.Services.AddScoped<IEmailService, ConsoleEmailService>();
 builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
+
 builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
@@ -144,8 +152,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// --- 4. PIPELINE DE EXECUÇÃO ---
-
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Frame-Options", "DENY");
@@ -156,9 +162,7 @@ app.Use(async (context, next) =>
 });
 
 app.UseMiddleware<ExceptionMiddleware>();
-
 app.UseCors("AllowFrontend");
-
 app.UseResponseCompression();
 
 if (!app.Environment.IsDevelopment())
@@ -190,10 +194,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

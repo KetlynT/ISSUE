@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, ShoppingCart, User, LogOut, Package, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard } from 'lucide-react';
 import { ContentService } from '../../services/contentService';
 import { useCart } from '../../context/CartContext';
 import { AuthService } from '../../services/authService';
@@ -8,7 +8,7 @@ import { AuthService } from '../../services/authService';
 export const Header = () => {
   const [logoUrl, setLogoUrl] = useState('');
   const [siteName, setSiteName] = useState('Gráfica Moderna');
-  const [loading, setLoading] = useState(true); // Estado de carregamento
+  const [loading, setLoading] = useState(true);
   
   const { cartCount } = useCart();
   const navigate = useNavigate();
@@ -43,7 +43,6 @@ export const Header = () => {
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         
-        {/* Lado Esquerdo: Logo e Nome */}
         <Link to="/" className="flex items-center gap-2 group">
           {loading ? (
             <div className="animate-pulse flex items-center gap-2">
@@ -66,7 +65,6 @@ export const Header = () => {
           )}
         </Link>
         
-        {/* Lado Direito: Navegação */}
         <nav className="flex items-center gap-6">
           {loading ? (
              <div className="animate-pulse h-4 w-24 bg-gray-200 rounded hidden md:block"></div>
@@ -88,13 +86,12 @@ export const Header = () => {
             </Link>
           )}
 
-          {/* Área do Usuário */}
           {!loading && (
             isAuthenticated ? (
                 <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
                     {isAdmin ? (
                         <Link 
-                            to="/painel-restrito-gerencial" 
+                            to="/putiroski/dashboard" 
                             className="flex items-center gap-2 text-sm font-bold text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 hover:bg-blue-100 transition-all" 
                         >
                             <LayoutDashboard size={18} />

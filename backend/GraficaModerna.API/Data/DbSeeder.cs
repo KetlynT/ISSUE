@@ -9,8 +9,11 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(AppDbContext context, UserManager<ApplicationUser> userManager, IConfiguration config)
     {
-        // Limpa e recria o banco (Apenas dev!)
+        // CUIDADO: Isso apaga o banco para recriar com dados novos (Apenas Dev!)
+        // Comente a linha abaixo se quiser persistir os dados entre reinícios
         await context.Database.EnsureDeletedAsync();
+
+        // Garante que o banco e as tabelas (incluindo a nova UserAddresses) existam
         await context.Database.EnsureCreatedAsync();
 
         // --- 1. USUÁRIOS ---
@@ -46,7 +49,7 @@ public static class DbSeeder
 
             if (result.Succeeded)
             {
-                // Adiciona endereço de exemplo
+                // Adiciona endereço de exemplo vinculado ao usuário
                 context.UserAddresses.Add(new UserAddress
                 {
                     UserId = clientUser.Id,
@@ -59,6 +62,7 @@ public static class DbSeeder
                     Neighborhood = "Sé",
                     City = "São Paulo",
                     State = "SP",
+                    Reference = "Próximo ao Metrô",
                     PhoneNumber = "11988887777",
                     IsDefault = true
                 });
@@ -102,8 +106,8 @@ public static class DbSeeder
         if (!context.ContentPages.Any())
         {
             context.ContentPages.AddRange(
-                new ContentPage("sobre-nos", "Sobre Nós", "<p>Somos líderes de mercado...</p>"),
-                new ContentPage("politica", "Política de Privacidade", "<p>Seus dados estão protegidos...</p>")
+                new ContentPage("sobre-nos", "Sobre Nós", "<p>Somos líderes de mercado em impressão digital e offset...</p>"),
+                new ContentPage("politica", "Política de Privacidade", "<p>Seus dados estão protegidos conforme a LGPD...</p>")
             );
             await context.SaveChangesAsync();
         }
@@ -111,12 +115,42 @@ public static class DbSeeder
         // --- 5. PRODUTOS ---
         if (!context.Products.Any())
         {
-            context.Products.AddRange(
-                new Product("Cartão de Visita Premium", "Couchê 300g, laminação fosca.", 89.90m, "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=800", 1.2m, 9, 5, 5, 500),
-                new Product("Panfletos A5 (2500 un)", "Couchê Brilho 115g.", 149.90m, "https://images.unsplash.com/photo-1586075010923-2dd45eeed8bd?q=80&w=800", 4.0m, 21, 15, 15, 200),
-                new Product("Adesivos em Vinil (m²)", "Corte especial, à prova d'água.", 65.00m, "https://images.unsplash.com/photo-1529338296731-c4280a44fc4e?q=80&w=800", 0.5m, 30, 30, 5, 100),
-                new Product("Banner em Lona", "Acabamento bastão e corda. 80x120cm.", 75.00m, "https://images.unsplash.com/photo-1512314889357-e157c22f938d?q=80&w=800", 1.0m, 120, 10, 10, 50)
-            );
+            var products = new List<Product>
+            {
+                new Product("Cartão de Visita Premium", "Couchê 300g, laminação fosca. O cartão que impõe respeito.", 89.90m,
+                    "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=800&auto=format&fit=crop",
+                    1.2m, 9, 5, 5, 500),
+
+                new Product("Cartão de Visita Ecológico", "Papel Reciclado 240g. Sustentabilidade para sua marca.", 95.00m,
+                    "https://images.unsplash.com/photo-1603201667230-bd1392185c78?q=80&w=800&auto=format&fit=crop",
+                    1.1m, 9, 5, 5, 300),
+
+                new Product("Panfletos A5 (2500 un)", "Couchê Brilho 115g. Ideal para divulgação em massa.", 149.90m,
+                    "https://images.unsplash.com/photo-1586075010923-2dd45eeed8bd?q=80&w=800&auto=format&fit=crop",
+                    4.0m, 21, 15, 15, 200),
+
+                new Product("Adesivos em Vinil (m²)", "Corte especial, à prova d'água. Durabilidade externa.", 65.00m,
+                    "https://images.unsplash.com/photo-1529338296731-c4280a44fc4e?q=80&w=800&auto=format&fit=crop",
+                    0.5m, 30, 30, 5, 100),
+
+                new Product("Banner em Lona 440g", "Acabamento bastão e corda. 80x120cm.", 75.00m,
+                    "https://images.unsplash.com/photo-1512314889357-e157c22f938d?q=80&w=800&auto=format&fit=crop",
+                    1.0m, 120, 10, 10, 50),
+
+                new Product("Envelopes Ofício", "Papel Offset 90g. Personalizados com sua logo. 500 un.", 199.00m,
+                    "https://images.unsplash.com/photo-1596230529625-7ee541fb359f?q=80&w=800&auto=format&fit=crop",
+                    2.5m, 25, 15, 15, 150),
+
+                new Product("Pasta com Bolsa", "Papel Supremo 300g. Bolsa interna colada. 100 un.", 350.00m,
+                    "https://images.unsplash.com/photo-1606859187968-360523d4e8c3?q=80&w=800&auto=format&fit=crop",
+                    5.0m, 35, 25, 10, 60),
+
+                new Product("Caderno Personalizado", "Capa dura, wire-o, miolo pautado com logo.", 45.00m,
+                    "https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=800&auto=format&fit=crop",
+                    0.4m, 25, 18, 2, 100)
+            };
+
+            context.Products.AddRange(products);
             await context.SaveChangesAsync();
         }
     }

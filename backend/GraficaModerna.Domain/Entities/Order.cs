@@ -5,19 +5,24 @@ public class Order
     public Guid Id { get; set; }
     public string UserId { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
+    public DateTime? DeliveryDate { get; set; }
 
     // Valores
-    public decimal SubTotal { get; set; } // Valor dos produtos
-    public decimal Discount { get; set; } // Valor abatido
-    public decimal TotalAmount { get; set; } // Valor final (SubTotal - Discount)
-    public string? AppliedCoupon { get; set; } // Código do cupom usado
+    public decimal SubTotal { get; set; }
+    public decimal Discount { get; set; }
+    public decimal ShippingCost { get; set; }
+    public string ShippingMethod { get; set; } = string.Empty;
+    public decimal TotalAmount { get; set; }
 
+    public string? AppliedCoupon { get; set; }
     public string Status { get; set; } = "Pendente";
-
-    // NOVO: Código de Rastreio
     public string? TrackingCode { get; set; }
 
-    // Endereço (Snapshot)
+    // NOVO: Logística Reversa
+    public string? ReverseLogisticsCode { get; set; } // Código do PAC Reverso
+    public string? ReturnInstructions { get; set; }   // Instruções do Admin
+
+    // Endereço
     public string ShippingAddress { get; set; } = string.Empty;
     public string ShippingZipCode { get; set; } = string.Empty;
 
