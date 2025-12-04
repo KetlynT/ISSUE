@@ -25,12 +25,11 @@ public class OrdersController : ControllerBase
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            // Chama o serviço corrigido que valida estoque, cupons e frete
+            // SEGURANÇA: Não passamos mais o ShippingCost vindo do cliente
             var order = await _orderService.CreateOrderFromCartAsync(
                 userId,
                 dto.Address,
                 dto.CouponCode,
-                dto.ShippingCost,
                 dto.ShippingMethod
             );
 
@@ -38,8 +37,6 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Retorna 400 Bad Request com a mensagem de erro (ex: "Estoque insuficiente")
-            // O frontend vai exibir isso no Toast.
             return BadRequest(new { message = ex.Message });
         }
     }
@@ -52,7 +49,6 @@ public class OrdersController : ControllerBase
         return Ok(orders);
     }
 
-    // Endpoint para Admin (futuro)
     [HttpGet("all")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetAllOrders()
@@ -77,11 +73,10 @@ public class OrdersController : ControllerBase
     }
 }
 
-// DTO Auxiliar para receber os dados do Frontend
 public class CheckoutDto
 {
     public CreateAddressDto Address { get; set; }
     public string? CouponCode { get; set; }
-    public decimal ShippingCost { get; set; }
+    // REMOVIDO: public decimal ShippingCost { get; set; } // Segurança
     public string ShippingMethod { get; set; }
 }

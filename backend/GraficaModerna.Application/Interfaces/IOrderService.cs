@@ -4,15 +4,15 @@ namespace GraficaModerna.Application.Interfaces;
 
 public interface IOrderService
 {
-    Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, decimal frontendShippingCost, string shippingMethod);
+    // REMOVIDO: decimal frontendShippingCost
+    Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, string shippingMethod);
+
     Task<List<OrderDto>> GetUserOrdersAsync(string userId);
-    Task<List<OrderDto>> GetAllOrdersAsync(); // Apenas Admin
-
-    // Método administrativo blindado
+    Task<List<OrderDto>> GetAllOrdersAsync();
     Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto);
-
-    Task PayOrderAsync(Guid orderId, string userId);
     Task RequestRefundAsync(Guid orderId, string userId);
+
+    // Métodos de Pagamento
     Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId);
-    Task UpdateOrderStatusAsync(Guid orderId, string status, string? trackingCode);
+    Task PayOrderAsync(Guid orderId, string userId);
 }

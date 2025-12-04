@@ -13,14 +13,28 @@ public class StripePaymentService : IPaymentService
     public StripePaymentService(IConfiguration configuration)
     {
         _configuration = configuration;
-        StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
+
+        // SEGURANÇA: Prioriza Variável de Ambiente em Produção
+        var apiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? _configuration["Stripe:SecretKey"];
+
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            throw new Exception("FATAL: Stripe Secret Key não configurada (STRIPE_SECRET_KEY).");
+        }
+
+        StripeConfiguration.ApiKey = apiKey;
     }
 
     public async Task<string> CreateCheckoutSessionAsync(Order order)
     {
-        var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:5173";
+        // Flexibilidade para Deploy (Docker/Azure/AWS usam Env Vars)
+        var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
+                          ?? _configuration["FrontendUrl"]
+                          ?? "http://localhost:5173";
 
-        // CORREÇÃO: URLs robustas
+        // Remove barras finais se existirem para evitar "//"
+        frontendUrl = frontendUrl.TrimEnd('/');
+
         var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
         var cancelUrl = $"{frontendUrl}/meus-pedidos";
 
@@ -33,15 +47,13 @@ public class StripePaymentService : IPaymentService
             {
                 { "order_id", order.Id.ToString() },
                 { "user_email", order.UserId },
-                // CORREÇÃO: Envia o valor esperado para validação futura
-                { "expected_amount", order.TotalAmount.ToString("F2") }
+                { "expected_amount", order.TotalAmount.ToString("F2") } // Útil para auditoria
             },
             LineItems = new List<SessionLineItemOptions>()
         };
 
         foreach (var item in order.Items)
         {
-            // CORREÇÃO: Arredondamento Explícito (Evita erro de 1 centavo)
             var unitAmount = (long)Math.Round(item.UnitPrice * 100);
 
             options.LineItems.Add(new SessionLineItemOptions
@@ -77,14 +89,16 @@ public class StripePaymentService : IPaymentService
             });
         }
 
+        // Lógica de Cupom (One-time usage)
         if (order.Discount > 0)
         {
+            // Cria um cupom dinâmico de uso único no Stripe
             var couponOptions = new CouponCreateOptions
             {
                 AmountOff = (long)Math.Round(order.Discount * 100),
                 Currency = "brl",
                 Duration = "once",
-                Name = order.AppliedCoupon ?? "Desconto"
+                Name = order.AppliedCoupon ?? "Desconto Promocional"
             };
 
             var stripeCouponService = new Stripe.CouponService();
@@ -114,7 +128,6 @@ public class StripePaymentService : IPaymentService
             Reason = RefundReasons.RequestedByCustomer
         };
 
-        // Deixamos a exceção subir para ser tratada no OrderService
         await refundService.CreateAsync(options);
     }
 }

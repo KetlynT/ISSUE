@@ -31,11 +31,21 @@ if (builder.Environment.IsDevelopment())
 
 builder.Configuration.AddEnvironmentVariables();
 
+// --- CORREÇÃO DE SEGURANÇA: Chave JWT Obrigatória ---
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? builder.Configuration["Jwt:Key"];
+
 if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
 {
-    // Em produção isso é crítico, mas em dev podemos avisar
-    Console.WriteLine("AVISO: Chave JWT não configurada ou muito curta.");
+    // Em produção, isso deve impedir a aplicação de subir para evitar brechas de segurança.
+    if (builder.Environment.IsProduction())
+    {
+        throw new Exception("FATAL: JWT_SECRET_KEY não configurada ou muito curta (min 32 chars). A aplicação não pode iniciar de forma segura.");
+    }
+    else
+    {
+        Console.WriteLine("AVISO CRÍTICO: Chave JWT insegura ou ausente. Usando chave temporária APENAS para desenvolvimento.");
+        jwtKey = "chave_temporaria_super_secreta_para_dev_apenas_999"; // Fallback explícito apenas para Dev
+    }
 }
 
 builder.Services.AddHttpClient();
@@ -71,7 +81,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
 .AddDefaultTokenProviders();
 
 // Configuração JWT
-var key = Encoding.ASCII.GetBytes(jwtKey ?? "chave_padrao_super_secreta_para_dev_apenas_123");
+var key = Encoding.ASCII.GetBytes(jwtKey); // Usa a chave validada acima
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -79,7 +89,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment(); // Https obrigatório em prod
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -121,7 +131,6 @@ builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica API", Version = "v1" });
-    // Configurar Auth no Swagger para testar Admin
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -134,10 +143,14 @@ builder.Services.AddSwaggerGen(c => {
     });
 });
 
+// CORREÇÃO: CORS configurável
+var allowedOrigins = builder.Configuration.GetSection("AllowedHosts").Get<string[]>()
+                     ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", b => b
-        .WithOrigins("http://localhost:5173", "http://localhost:3000")
+        .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials());
@@ -165,17 +178,17 @@ if (!app.Environment.IsDevelopment())
 
 app.UseRateLimiter();
 
-// SEEDER ATUALIZADO
 using (var scope = app.Services.CreateScope())
 {
     try
     {
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(); // NOVO
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-        if (app.Environment.IsDevelopment())
+        // Seed executado apenas se necessário ou em Dev (ajuste conforme estratégia de deploy)
+        if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("RUN_SEED") == "true")
             await DbSeeder.SeedAsync(context, userManager, roleManager, config);
     }
     catch (Exception ex)

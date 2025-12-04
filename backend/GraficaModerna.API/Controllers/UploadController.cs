@@ -36,38 +36,47 @@ public class UploadController : ControllerBase
         if (!AllowedExtensions.Contains(ext))
             return BadRequest("Formato de ficheiro não permitido. Apenas imagens (.jpg, .png, .webp) são aceites.");
 
-        // VALIDAÇÃO DE SEGURANÇA: Magic Numbers (Verifica o conteúdo real do ficheiro)
-        try
-        {
-            using (var reader = new BinaryReader(file.OpenReadStream()))
-            {
-                var headerBytes = reader.ReadBytes(12); // Lê os primeiros bytes
-                var signatures = _fileSignatures.ContainsKey(ext) ? _fileSignatures[ext] : null;
-
-                // Verifica se o cabeçalho do ficheiro corresponde à extensão esperada
-                if (signatures == null || !signatures.Any(signature =>
-                    headerBytes.Take(signature.Length).SequenceEqual(signature)))
-                {
-                    return BadRequest("O ficheiro está corrompido ou é malicioso.");
-                }
-            }
-        }
-        catch
-        {
-            return BadRequest("Erro ao validar o ficheiro.");
-        }
-
         var folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
         if (!Directory.Exists(folderPath))
             Directory.CreateDirectory(folderPath);
 
-        // Gera nome aleatório para evitar sobrescrita e nomes maliciosos
         var fileName = $"{Guid.NewGuid()}{ext}";
         var filePath = Path.Combine(folderPath, fileName);
 
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        try
         {
-            await file.CopyToAsync(stream);
+            // CORREÇÃO CRÍTICA: Usar MemoryStream para validação segura sem fechar o stream original
+            using (var memoryStream = new MemoryStream())
+            {
+                // Copia o conteúdo para memória primeiro
+                await file.CopyToAsync(memoryStream);
+
+                // 1. Validação de Magic Numbers (lendo do MemoryStream)
+                memoryStream.Position = 0; // Volta ao início para ler
+                using (var reader = new BinaryReader(memoryStream, System.Text.Encoding.Default, leaveOpen: true))
+                {
+                    var headerBytes = reader.ReadBytes(12);
+                    var signatures = _fileSignatures.ContainsKey(ext) ? _fileSignatures[ext] : null;
+
+                    if (signatures == null || !signatures.Any(signature =>
+                        headerBytes.Take(signature.Length).SequenceEqual(signature)))
+                    {
+                        return BadRequest("O ficheiro está corrompido ou é malicioso (assinatura inválida).");
+                    }
+                }
+
+                // 2. Salvar no Disco (lendo do MemoryStream validado)
+                memoryStream.Position = 0; // Volta ao início para salvar
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await memoryStream.CopyToAsync(stream);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Logar erro real em produção
+            return BadRequest($"Erro ao processar o ficheiro: {ex.Message}");
         }
 
         var imageUrl = $"{Request.Scheme}://{Request.Host}/images/{fileName}";
