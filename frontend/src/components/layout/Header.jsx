@@ -1,21 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard, Package } from 'lucide-react'; // Package Importado
+import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard, Package } from 'lucide-react';
 import { ContentService } from '../../services/contentService';
 import { useCart } from '../../context/CartContext';
-import { AuthService } from '../../services/authService';
+import { useAuth } from '../../context/AuthContext'; // IMPORTANTE
 
 export const Header = () => {
   const [logoUrl, setLogoUrl] = useState('');
   const [siteName, setSiteName] = useState('Gráfica Moderna');
-  const [loading, setLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   
   const { cartCount } = useCart();
+  const { user, logout, isAuthenticated } = useAuth(); // Hook Reativo
   const navigate = useNavigate();
   
-  const isAuthenticated = AuthService.isAuthenticated();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = isAuthenticated && user.role === 'Admin';
+  const isAdmin = user?.role === 'Admin';
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -28,14 +27,14 @@ export const Header = () => {
       } catch (error) {
         console.error("Erro ao carregar topo", error);
       } finally {
-        setLoading(false);
+        setSettingsLoading(false);
       }
     };
     loadSettings();
   }, []);
 
-  const handleLogout = () => {
-    AuthService.logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
@@ -44,7 +43,7 @@ export const Header = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         
         <Link to="/" className="flex items-center gap-2 group">
-          {loading ? (
+          {settingsLoading ? (
             <div className="animate-pulse flex items-center gap-2">
                 <div className="w-10 h-10 bg-gray-200 rounded-xl"></div>
                 <div className="h-4 w-32 bg-gray-200 rounded"></div>
@@ -66,7 +65,7 @@ export const Header = () => {
         </Link>
         
         <nav className="flex items-center gap-6">
-          {loading ? (
+          {settingsLoading ? (
              <div className="animate-pulse h-4 w-24 bg-gray-200 rounded hidden md:block"></div>
           ) : (
              <Link to="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium">
@@ -75,7 +74,8 @@ export const Header = () => {
              </Link>
           )}
 
-          {!isAdmin && !loading && (
+          {/* Carrinho some para Admin ou Carregando */}
+          {!isAdmin && !settingsLoading && (
             <Link to="/carrinho" className="relative group p-2">
                 <ShoppingCart size={24} className="text-gray-600 group-hover:text-blue-600 transition-colors" />
                 {cartCount > 0 && (
@@ -86,7 +86,7 @@ export const Header = () => {
             </Link>
           )}
 
-          {!loading && (
+          {!settingsLoading && (
             isAuthenticated ? (
                 <div className="flex items-center gap-4 border-l pl-6 border-gray-200">
                     {isAdmin ? (

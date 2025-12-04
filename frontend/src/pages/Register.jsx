@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { AuthService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 import { UserPlus, User, Mail, Lock, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -10,10 +10,11 @@ export const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    phoneNumber: '' // NOVO CAMPO
+    phoneNumber: ''
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { register } = useAuth(); // Contexto
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -26,12 +27,10 @@ export const Register = () => {
       toast.error("As senhas não conferem.");
       return;
     }
-
-    if (formData.password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres.");
+    if (formData.password.length < 8) { // Ajustado para política mais forte
+      toast.error("A senha deve ter pelo menos 8 caracteres.");
       return;
     }
-
     if (!formData.phoneNumber) {
       toast.error("O telefone é obrigatório.");
       return;
@@ -40,13 +39,20 @@ export const Register = () => {
     setLoading(true);
     
     try {
-      // Atualizado para enviar 4 argumentos
-      await AuthService.register(formData.fullName, formData.email, formData.password, formData.phoneNumber);
-      toast.success("Conta criada com sucesso! Bem-vindo.");
+      // Envia objeto único, conforme esperado pelo AuthContext -> AuthService
+      await register({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        phoneNumber: formData.phoneNumber
+      });
+      
+      toast.success("Conta criada com sucesso!");
       navigate('/'); 
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.message || err.response?.data || "Erro ao criar conta. Verifique os dados.";
+      // Extrai mensagem de erro do backend (ex: "Senha deve ter caractere especial")
+      const msg = err.response?.data?.message || "Erro ao criar conta. Verifique os dados.";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -96,7 +102,6 @@ export const Register = () => {
             </div>
           </div>
 
-          {/* NOVO CAMPO: Telefone */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Telefone / WhatsApp</label>
             <div className="relative">
@@ -121,7 +126,7 @@ export const Register = () => {
                     name="password"
                     type="password"
                     className="w-full border border-gray-300 rounded-lg pl-10 p-2.5 outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres, maiúscula e especial"
                     value={formData.password}
                     onChange={handleChange}
                     required

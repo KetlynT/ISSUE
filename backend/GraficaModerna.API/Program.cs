@@ -1,4 +1,3 @@
-using GraficaModerna.API.Data;
 using GraficaModerna.API.Middlewares;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Application.Mappings;
@@ -21,39 +20,36 @@ using Ganss.Xss;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using System.Threading.RateLimiting;
+using GraficaModerna.API.Data; // Necessário para DbSeeder se usado
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Carrega variáveis de ambiente
 if (builder.Environment.IsDevelopment())
 {
     DotNetEnv.Env.Load();
 }
-
 builder.Configuration.AddEnvironmentVariables();
 
-// --- CORREÇÃO DE SEGURANÇA: Chave JWT Obrigatória ---
+// --- SEGURANÇA: Validação da Chave JWT ---
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? builder.Configuration["Jwt:Key"];
-
 if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
 {
-    // Em produção, isso deve impedir a aplicação de subir para evitar brechas de segurança.
     if (builder.Environment.IsProduction())
-    {
-        throw new Exception("FATAL: JWT_SECRET_KEY não configurada ou muito curta (min 32 chars). A aplicação não pode iniciar de forma segura.");
-    }
-    else
-    {
-        Console.WriteLine("AVISO CRÍTICO: Chave JWT insegura ou ausente. Usando chave temporária APENAS para desenvolvimento.");
-        jwtKey = "chave_temporaria_super_secreta_para_dev_apenas_999"; // Fallback explícito apenas para Dev
-    }
+        throw new Exception("FATAL: JWT_SECRET_KEY insegura ou ausente em produção.");
+
+    // Fallback apenas para DEV
+    jwtKey = "chave_temporaria_super_secreta_para_dev_apenas_999";
 }
 
+// Serviços Básicos
 builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddMemoryCache();
+builder.Services.AddMemoryCache(); // Essencial para a Blacklist
 
+// Compressão
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -61,27 +57,43 @@ builder.Services.AddResponseCompression(options =>
     options.Providers.Add<GzipCompressionProvider>();
 });
 
+// --- SEGURANÇA: Rate Limiting ---
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Limite Global
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions { AutoReplenishment = true, PermitLimit = 300, QueueLimit = 2, Window = TimeSpan.FromMinutes(1) }));
+
+    // Política Específica para Auth (Login/Register) - CORREÇÃO DO ERRO
+    options.AddPolicy("AuthPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions { AutoReplenishment = true, PermitLimit = 10, QueueLimit = 0, Window = TimeSpan.FromMinutes(5) }));
 });
 
+// Banco de Dados
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// --- SEGURANÇA: Identity (Senhas Fortes) ---
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
-    options.Password.RequireDigit = false;
-    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true; // Exige caractere especial
+    options.Password.RequiredLength = 8; // Mínimo seguro
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5; // Bloqueia após 5 tentativas erradas
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// Configuração JWT
-var key = Encoding.ASCII.GetBytes(jwtKey); // Usa a chave validada acima
+// --- SEGURANÇA: JWT com Cookie e Blacklist ---
+var key = Encoding.ASCII.GetBytes(jwtKey);
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -89,7 +101,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment(); // Https obrigatório em prod
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -101,6 +113,30 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = builder.Configuration["Jwt:Audience"],
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        // 1. Extrair Token do Cookie HttpOnly
+        OnMessageReceived = context =>
+        {
+            if (context.Request.Cookies.ContainsKey("jwt"))
+            {
+                context.Token = context.Request.Cookies["jwt"];
+            }
+            return Task.CompletedTask;
+        },
+        // 2. Verificar Blacklist (Revogação)
+        OnTokenValidated = async context =>
+        {
+            var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
+            var token = context.SecurityToken.RawData; // Pega o token bruto
+
+            if (await blacklistService.IsTokenBlacklistedAsync(token))
+            {
+                context.Fail("Token revogado.");
+            }
+        }
     };
 });
 
@@ -114,6 +150,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>(); // NOVO
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
@@ -129,12 +166,15 @@ builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
 
+// Swagger Config
 builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica API", Version = "v1" });
+    // Nota: Como usamos Cookies, o Swagger precisa de ajustes manuais para testar, 
+    // ou usamos Postman/Insomnia. Mantive Bearer para compatibilidade se necessário.
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Insira o token JWT",
+        Description = "Insira o token JWT (Para uso via header, se necessário)",
         Name = "Authorization",
         Type = SecuritySchemeType.ApiKey
     });
@@ -143,7 +183,7 @@ builder.Services.AddSwaggerGen(c => {
     });
 });
 
-// CORREÇÃO: CORS configurável
+// CORS Config (Ajuste para permitir Cookies/Credentials)
 var allowedOrigins = builder.Configuration.GetSection("AllowedHosts").Get<string[]>()
                      ?? new[] { "http://localhost:5173", "http://localhost:3000" };
 
@@ -153,11 +193,12 @@ builder.Services.AddCors(options =>
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .AllowCredentials());
+        .AllowCredentials()); // OBRIGATÓRIO para Cookies funcionarem
 });
 
 var app = builder.Build();
 
+// Headers de Segurança
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Frame-Options", "DENY");
@@ -167,7 +208,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Middleware de Exceção (Info Disclosure Fix)
 app.UseMiddleware<ExceptionMiddleware>();
+
 app.UseCors("AllowFrontend");
 
 if (!app.Environment.IsDevelopment())
@@ -178,6 +221,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseRateLimiter();
 
+// Seed de dados
 using (var scope = app.Services.CreateScope())
 {
     try
@@ -187,7 +231,6 @@ using (var scope = app.Services.CreateScope())
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-        // Seed executado apenas se necessário ou em Dev (ajuste conforme estratégia de deploy)
         if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("RUN_SEED") == "true")
             await DbSeeder.SeedAsync(context, userManager, roleManager, config);
     }
@@ -204,8 +247,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+
+// Ordem Importante: Auth -> Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

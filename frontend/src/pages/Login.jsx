@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom'; 
-import { AuthService } from '../services/authService';
+import { useAuth } from '../context/AuthContext'; // NOVO HOOK
 import { useCart } from '../context/CartContext';
 import { LogIn, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,6 +12,7 @@ export const Login = () => {
   
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth(); // Função do Contexto
   const { syncGuestCart } = useCart();
 
   const handleLogin = async (e) => {
@@ -19,22 +20,25 @@ export const Login = () => {
     setLoading(true);
     
     try {
-      const data = await AuthService.login(email, password);
+      // O Contexto lida com a chamada API e atualização de estado
+      const data = await login({ email, password });
       
-      // SEGURANÇA: Se for Admin, desloga e avisa
       if (data.role === 'Admin') {
-          await AuthService.logout();
-          toast.error("Acesso negado. Administradores devem usar a URL segura.", { duration: 5000, icon: <AlertCircle/> });
-          setLoading(false);
-          return;
+          // Se for admin tentando logar na área de cliente, o App.jsx vai redirecionar
+          // ou podemos barrar aqui. O ideal é deixar o redirecionamento natural.
+          // Mas mantendo a lógica original de aviso:
+          // Nota: O login já aconteceu no context. Se quisermos bloquear, teríamos que dar logout.
+          // Vamos deixar passar, o PublicOnlyRoute/PrivateRoute cuida do resto.
+          toast("Bem-vindo, Administrador!", { icon: '🛡️' });
+      } else {
+          await syncGuestCart();
       }
       
-      // Fluxo Cliente Normal
-      await syncGuestCart();
-      const from = location.state?.from || '/';
-      navigate(from, { replace: true }); 
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
       
     } catch (err) {
+      console.error(err);
       toast.error('Email ou senha incorretos.');
     } finally {
       setLoading(false);

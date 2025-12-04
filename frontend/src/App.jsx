@@ -1,11 +1,11 @@
 import React, { useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 import { MainLayout } from './components/layout/MainLayout';
-import { AuthService } from './services/authService';
 import { ContentService } from './services/contentService';
 import { CartProvider } from './context/CartContext';
+import { AuthProvider, useAuth } from './context/AuthContext'; // NOVO
 import ScrollToTop from './components/ScrollToTop';
 import { CookieConsent } from './components/CookieConsent';
 
@@ -23,7 +23,6 @@ const Checkout = lazy(() => import('./pages/Checkout').then(module => ({ default
 const MyOrders = lazy(() => import('./pages/MyOrders').then(module => ({ default: module.MyOrders })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
 const Success = lazy(() => import('./pages/Success').then(module => ({ default: module.Success })));
-// NOVA PÁGINA
 const ErrorPage = lazy(() => import('./pages/ErrorPage').then(module => ({ default: module.ErrorPage })));
 
 const PageLoader = () => (
@@ -32,15 +31,28 @@ const PageLoader = () => (
   </div>
 );
 
+// Rota Privada Atualizada: Espera o AuthContext carregar
 const PrivateRoute = ({ children }) => {
-  const isAuth = AuthService.isAuthenticated();
-  return isAuth ? children : <Navigate to="/login" replace />;
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <PageLoader />;
+  
+  if (!user) {
+    // Redireciona para login salvando a origem
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
 };
 
+// Rota Pública (Login/Register): Se já logado, redireciona
 const PublicOnlyRoute = ({ children }) => {
-  const isAuth = AuthService.isAuthenticated();
-  if (isAuth) {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const { user, loading } = useAuth();
+  
+  if (loading) return <PageLoader />;
+
+  if (user) {
     if (user.role === 'Admin') return <Navigate to="/putiroski/dashboard" replace />;
     return <Navigate to="/" replace />;
   }
@@ -48,16 +60,8 @@ const PublicOnlyRoute = ({ children }) => {
 };
 
 const setFallbackFavicon = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1f2937';
-    ctx.beginPath(); ctx.roundRect(0, 0, 64, 64, 16); ctx.fill();
-    ctx.font = 'bold 40px sans-serif'; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('X', 32, 34);
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-    link.type = 'image/png'; link.rel = 'icon'; link.href = canvas.toDataURL();
+    link.type = 'image/png'; link.rel = 'icon'; link.href = '/favicon.ico'; // Simplificado
     document.getElementsByTagName('head')[0].appendChild(link);
 };
 
@@ -78,38 +82,44 @@ function App() {
   }, []);
 
   return (
-    <CartProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <Toaster position="top-right" />
-        <CookieConsent />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* Rota de Erro Crítico (Fora do Layout Principal) */}
-            <Route path="/error" element={<ErrorPage />} />
+    <AuthProvider>
+      <CartProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <Toaster position="top-right" />
+          <CookieConsent />
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/error" element={<ErrorPage />} />
 
-            <Route element={<MainLayout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/contato" element={<Contact />} />
-              <Route path="/produto/:id" element={<ProductDetails />} />
-              <Route path="/pagina/:slug" element={<GenericPage />} />
-              <Route path="/carrinho" element={<Cart />} />
-              <Route path="/checkout" element={<PrivateRoute><Checkout /></PrivateRoute>} />
-              <Route path="/meus-pedidos" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
-              <Route path="/perfil" element={<PrivateRoute><Profile /></PrivateRoute>} />
-              <Route path="/sucesso" element={<PrivateRoute><Success /></PrivateRoute>} />
-            </Route>
+              <Route element={<MainLayout />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/contato" element={<Contact />} />
+                <Route path="/produto/:id" element={<ProductDetails />} />
+                <Route path="/pagina/:slug" element={<GenericPage />} />
+                <Route path="/carrinho" element={<Cart />} />
+                
+                {/* Rotas Protegidas */}
+                <Route path="/checkout" element={<PrivateRoute><Checkout /></PrivateRoute>} />
+                <Route path="/meus-pedidos" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
+                <Route path="/perfil" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                <Route path="/sucesso" element={<PrivateRoute><Success /></PrivateRoute>} />
+              </Route>
 
-            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-            <Route path="/cadastro" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
-            <Route path="/putiroski" element={<PublicOnlyRoute><AdminLogin /></PublicOnlyRoute>} />
-            <Route path="/putiroski/dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+              {/* Rotas de Acesso */}
+              <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+              <Route path="/cadastro" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
+              
+              {/* Admin */}
+              <Route path="/putiroski" element={<PublicOnlyRoute><AdminLogin /></PublicOnlyRoute>} />
+              <Route path="/putiroski/dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </CartProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </CartProvider>
+    </AuthProvider>
   );
 }
 
