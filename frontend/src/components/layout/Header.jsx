@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard } from 'lucide-react';
+import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard, Package } from 'lucide-react'; // Package Importado
 import { ContentService } from '../../services/contentService';
 import { useCart } from '../../context/CartContext';
 import { AuthService } from '../../services/authService';

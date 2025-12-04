@@ -14,7 +14,7 @@ const Home = lazy(() => import('./pages/Home').then(module => ({ default: module
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
 const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
-const AdminLogin = lazy(() => import('./pages/AdminLogin').then(module => ({ default: module.AdminLogin }))); // NOVO IMPORT
+const AdminLogin = lazy(() => import('./pages/AdminLogin').then(module => ({ default: module.AdminLogin })));
 const ProductDetails = lazy(() => import('./pages/ProductDetails').then(module => ({ default: module.ProductDetails })));
 const GenericPage = lazy(() => import('./pages/GenericPage').then(module => ({ default: module.GenericPage })));
 const Contact = lazy(() => import('./pages/Contact').then(module => ({ default: module.Contact })));
@@ -22,6 +22,9 @@ const Cart = lazy(() => import('./pages/Cart').then(module => ({ default: module
 const Checkout = lazy(() => import('./pages/Checkout').then(module => ({ default: module.Checkout })));
 const MyOrders = lazy(() => import('./pages/MyOrders').then(module => ({ default: module.MyOrders })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
+const Success = lazy(() => import('./pages/Success').then(module => ({ default: module.Success })));
+// NOVA PÁGINA
+const ErrorPage = lazy(() => import('./pages/ErrorPage').then(module => ({ default: module.ErrorPage })));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -34,20 +37,16 @@ const PrivateRoute = ({ children }) => {
   return isAuth ? children : <Navigate to="/login" replace />;
 };
 
-// Rota para bloquear usuários logados de acessar login de novo
 const PublicOnlyRoute = ({ children }) => {
   const isAuth = AuthService.isAuthenticated();
   if (isAuth) {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    // Se for Admin, manda pro Dashboard secreto
     if (user.role === 'Admin') return <Navigate to="/putiroski/dashboard" replace />;
-    // Se for User, manda pra Home
     return <Navigate to="/" replace />;
   }
   return children;
 };
 
-// --- FAVICON SETUP ---
 const setFallbackFavicon = () => {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
@@ -86,7 +85,9 @@ function App() {
         <CookieConsent />
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            {/* ROTAS PÚBLICAS (SITE) */}
+            {/* Rota de Erro Crítico (Fora do Layout Principal) */}
+            <Route path="/error" element={<ErrorPage />} />
+
             <Route element={<MainLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/contato" element={<Contact />} />
@@ -96,17 +97,12 @@ function App() {
               <Route path="/checkout" element={<PrivateRoute><Checkout /></PrivateRoute>} />
               <Route path="/meus-pedidos" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
               <Route path="/perfil" element={<PrivateRoute><Profile /></PrivateRoute>} />
+              <Route path="/sucesso" element={<PrivateRoute><Success /></PrivateRoute>} />
             </Route>
 
-            {/* ROTA LOGIN CLIENTE */}
             <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
             <Route path="/cadastro" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
-            
-            {/* ÁREA SECRETA ADMIN */}
-            {/* 1. Login Secreto */}
             <Route path="/putiroski" element={<PublicOnlyRoute><AdminLogin /></PublicOnlyRoute>} />
-            
-            {/* 2. Dashboard Secreto (Protegido) */}
             <Route path="/putiroski/dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />

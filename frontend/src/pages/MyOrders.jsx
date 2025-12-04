@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CartService } from '../services/cartService';
+import { PaymentService } from '../services/paymentService'; // Importar PaymentService
 import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
@@ -33,15 +34,15 @@ export const MyOrders = () => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
   };
 
+  // NOVA LÓGICA: Pagar via Stripe para pedidos pendentes
   const handlePay = async (e, orderId) => {
     e.stopPropagation();
-    const loadingToast = toast.loading("Processando pagamento...");
+    const loadingToast = toast.loading("Iniciando pagamento...");
     try {
-        await CartService.payOrder(orderId);
-        toast.success("Pagamento aprovado!", { id: loadingToast });
-        loadOrders();
+        const { url } = await PaymentService.createCheckoutSession(orderId);
+        window.location.href = url; // Redireciona para Stripe
     } catch (error) {
-        toast.error("Erro no pagamento.", { id: loadingToast });
+        toast.error("Erro ao iniciar pagamento.", { id: loadingToast });
     }
   };
 
@@ -117,6 +118,7 @@ export const MyOrders = () => {
                         <div className="text-xs text-gray-500 uppercase font-bold">Total</div>
                         <div className="text-xl font-bold text-green-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.totalAmount)}</div>
                     </div>
+                    {/* Botão de Pagar agora leva para o Stripe */}
                     {order.status === 'Pendente' && <Button size="sm" onClick={(e) => handlePay(e, order.id)}><CreditCard size={16} /> Pagar</Button>}
                     {expandedOrderId === order.id ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
                 </div>
@@ -126,7 +128,6 @@ export const MyOrders = () => {
                 {expandedOrderId === order.id && (
                     <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden border-t border-gray-100">
                         <div className="p-6 bg-white">
-                            {/* Seção de Logística Reversa (Visível se o Admin enviou código) */}
                             {order.reverseLogisticsCode && (
                                 <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
                                     <h4 className="text-orange-800 font-bold flex items-center gap-2 mb-2"><Box size={18}/> Instruções de Devolução</h4>
@@ -160,7 +161,6 @@ export const MyOrders = () => {
                                 </tbody>
                             </table>
 
-                            {/* Botão de Reembolso Discreto e Menor */}
                             {showSection && (
                                 <div className="border-t pt-3 flex justify-end">
                                     <button

@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
-import { ShippingService } from '../services/shippingService';
 import { useCart } from '../context/CartContext';
 import { AuthService } from '../services/authService';
-import { Truck, ShoppingCart, MessageSquare, Plus, Minus, Zap } from 'lucide-react';
+import { ShoppingCart, MessageSquare, Plus, Minus, Zap } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { ShippingCalculator } from '../components/ShippingCalculator'; // Importado
 
 export const ProductDetails = () => {
   const { id } = useParams();
@@ -18,12 +18,6 @@ export const ProductDetails = () => {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-
-  // Estados Frete
-  const [cep, setCep] = useState('');
-  const [shippingOptions, setShippingOptions] = useState(null);
-  const [calcLoading, setCalcLoading] = useState(false);
-  const [calcError, setCalcError] = useState('');
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = AuthService.isAuthenticated() && user.role === 'Admin';
@@ -49,31 +43,10 @@ export const ProductDetails = () => {
     loadData();
   }, [id]);
 
-  const handleCalculateShipping = async (e) => {
-    e.preventDefault();
-    if (cep.length < 8) {
-        setCalcError("Digite um CEP válido.");
-        return;
-    }
-    setCalcLoading(true);
-    setCalcError('');
-    setShippingOptions(null);
-
-    try {
-        const options = await ShippingService.calculateForProduct(product.id, cep);
-        setShippingOptions(options);
-    } catch (error) {
-        setCalcError("Erro ao calcular frete. Verifique o CEP.");
-    } finally {
-        setCalcLoading(false);
-    }
-  };
-
   const handleAddToCart = async () => {
     await addToCart(product, quantity);
   };
 
-  // NOVO: Comprar Agora
   const handleBuyNow = async () => {
     await addToCart(product, quantity);
     navigate('/carrinho');
@@ -157,36 +130,11 @@ export const ProductDetails = () => {
                 </div>
             </div>
 
-            {/* Calculadora de Frete */}
-            <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                    <Truck size={18} className="text-blue-600"/> Calcular Frete e Prazo
-                </h3>
-                <form onSubmit={handleCalculateShipping} className="flex gap-2 mb-4">
-                    <input 
-                        type="text" placeholder="Digite seu CEP" maxLength="9"
-                        className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={cep} onChange={(e) => setCep(e.target.value)}
-                    />
-                    <button type="submit" disabled={calcLoading} className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded text-sm font-bold">
-                        {calcLoading ? '...' : 'OK'}
-                    </button>
-                </form>
-                {calcError && <div className="text-red-500 text-sm mb-2">{calcError}</div>}
-                {shippingOptions && (
-                    <div className="space-y-2 animate-in fade-in">
-                        {shippingOptions.map((opt, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-gray-200 text-sm">
-                                <div>
-                                    <span className="font-bold text-gray-800">{opt.name}</span>
-                                    <span className="text-xs text-gray-500 block">Até {opt.deliveryDays} dias úteis</span>
-                                </div>
-                                <span className="font-bold text-green-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.price)}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            {/* Calculadora de Frete Reutilizável */}
+            <ShippingCalculator 
+                productId={product.id} 
+                className="bg-gray-50 border border-gray-200"
+            />
           </div>
         </div>
       </div>

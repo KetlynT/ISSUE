@@ -20,7 +20,11 @@ public class Order
     public string Status { get; set; } = "Pendente";
     public string? TrackingCode { get; set; }
 
-    // NOVO: Logística Reversa
+    // DADOS DO STRIPE (NOVOS)
+    public string? StripeSessionId { get; set; }
+    public string? StripePaymentIntentId { get; set; }
+
+    // Logística Reversa
     public string? ReverseLogisticsCode { get; set; }
     public string? ReturnInstructions { get; set; }
 
@@ -29,7 +33,7 @@ public class Order
     public string ShippingZipCode { get; set; } = string.Empty;
 
     // SEGURANÇA & AUDITORIA
-    public string? CustomerIp { get; set; } // Campo adicionado para rastreio
+    public string? CustomerIp { get; set; }
 
     public List<OrderItem> Items { get; set; } = new();
 }

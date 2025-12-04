@@ -13,7 +13,6 @@ public class OrderService : IOrderService
     private readonly IUnitOfWork _uow;
     private readonly IEmailService _emailService;
     private readonly UserManager<ApplicationUser> _userManager;
-    // Dependências novas para segurança
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IEnumerable<IShippingService> _shippingServices;
 
@@ -33,11 +32,9 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, decimal frontendShippingCost, string shippingMethod)
     {
-        // 1. Recálculo de Frete (SEGURANÇA CRÍTICA: Não confiar no frontendShippingCost)
         var cart = await _uow.Carts.GetByUserIdAsync(userId);
         if (cart == null || !cart.Items.Any()) throw new Exception("Carrinho vazio.");
 
-        // Monta os itens para cálculo de frete usando dados do banco (Product)
         var shippingItems = cart.Items.Select(i => new ShippingItemDto
         {
             ProductId = i.ProductId,
@@ -49,29 +46,25 @@ public class OrderService : IOrderService
         }).ToList();
 
         decimal verifiedShippingCost = 0;
-        bool shippingMethodFound = false;
 
         // Executa cálculo real nos provedores
         var shippingTasks = _shippingServices.Select(s => s.CalculateAsync(addressDto.ZipCode, shippingItems));
         var shippingResults = await Task.WhenAll(shippingTasks);
         var allOptions = shippingResults.SelectMany(x => x).ToList();
 
-        // Tenta encontrar a opção escolhida pelo usuário
+        // CORREÇÃO: Variável 'shippingMethodFound' removida. 
+        // A lógica do 'else throw' já garante que só continuamos se encontrar.
         var selectedOption = allOptions.FirstOrDefault(o => o.Name == shippingMethod);
 
         if (selectedOption != null)
         {
             verifiedShippingCost = selectedOption.Price;
-            shippingMethodFound = true;
         }
         else
         {
-            // Fallback: Se o método não existir mais, pega o mais barato ou lança erro
-            // Aqui vamos lançar erro para segurança
             throw new Exception("O método de envio selecionado não está mais disponível ou é inválido.");
         }
 
-        // --- Início da Transação ---
         using var transaction = await _uow.BeginTransactionAsync();
         try
         {
@@ -81,10 +74,7 @@ public class OrderService : IOrderService
             foreach (var item in cart.Items)
             {
                 if (item.Product == null) continue;
-
-                // Controle de Concorrência (DebitStock)
                 item.Product.DebitStock(item.Quantity);
-
                 subTotal += item.Quantity * item.Product.Price;
 
                 orderItems.Add(new OrderItem
@@ -104,7 +94,6 @@ public class OrderService : IOrderService
                     discount = subTotal * (coupon.DiscountPercentage / 100m);
             }
 
-            // Usa o custo verificado, não o do parâmetro
             decimal totalAmount = (subTotal - discount) + verifiedShippingCost;
 
             var formattedAddress = $"{addressDto.Street}, {addressDto.Number}";
@@ -113,7 +102,6 @@ public class OrderService : IOrderService
             if (!string.IsNullOrWhiteSpace(addressDto.Reference)) formattedAddress += $" (Ref: {addressDto.Reference})";
             formattedAddress += $" - A/C: {addressDto.ReceiverName} - Tel: {addressDto.PhoneNumber}";
 
-            // Captura de IP para Auditoria
             var clientIp = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
             var order = new Order
@@ -121,7 +109,7 @@ public class OrderService : IOrderService
                 UserId = userId,
                 ShippingAddress = formattedAddress,
                 ShippingZipCode = addressDto.ZipCode,
-                ShippingCost = verifiedShippingCost, // Valor Seguro
+                ShippingCost = verifiedShippingCost,
                 ShippingMethod = shippingMethod,
                 Status = "Pendente",
                 OrderDate = DateTime.UtcNow,
@@ -130,7 +118,7 @@ public class OrderService : IOrderService
                 TotalAmount = totalAmount,
                 AppliedCoupon = !string.IsNullOrEmpty(couponCode) ? couponCode.ToUpper() : null,
                 Items = orderItems,
-                CustomerIp = clientIp // Auditoria
+                CustomerIp = clientIp
             };
 
             await _uow.Orders.AddAsync(order);
@@ -139,7 +127,6 @@ public class OrderService : IOrderService
             await _uow.CommitAsync();
             await transaction.CommitAsync();
 
-            // Envio de e-mail (Fire and forget)
             try
             {
                 var user = await _userManager.FindByIdAsync(userId);
@@ -161,8 +148,6 @@ public class OrderService : IOrderService
         }
     }
 
-    // ... (Mantenha os outros métodos existentes abaixo sem alterações: PayOrderAsync, GetUserOrdersAsync, etc.)
-
     public async Task PayOrderAsync(Guid orderId, string userId)
     {
         var order = await _uow.Orders.GetByIdAsync(orderId);
@@ -178,9 +163,13 @@ public class OrderService : IOrderService
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId)
     {
         var order = await _uow.Orders.GetByIdAsync(orderId);
+        // Se já estiver pago, ignora para garantir idempotência
         if (order == null || order.Status == "Pago") return;
 
         order.Status = "Pago";
+        // Opcional: Salvar o ID da transação no pedido se tiver adicionado o campo na entidade Order
+        // order.PaymentTransactionId = transactionId; 
+
         await _uow.Orders.UpdateAsync(order);
         await _uow.CommitAsync();
     }
@@ -213,7 +202,7 @@ public class OrderService : IOrderService
         }
     }
 
-    // Método auxiliar para Admin
+    // Método auxiliar para Admin (pode ser movido para Interface no futuro)
     public async Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
         var order = await _uow.Orders.GetByIdAsync(orderId);

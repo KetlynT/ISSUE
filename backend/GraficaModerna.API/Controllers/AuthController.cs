@@ -12,7 +12,7 @@ namespace GraficaModerna.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
-    private readonly ILogger<AuthController> _logger; // Injetar Logger
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
@@ -26,11 +26,6 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.RegisterAsync(dto);
         SetTokenCookie(result.Token);
-
-        // Log de Auditoria
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogInformation("Novo registro: {Email} - IP: {IP}", result.Email, ip);
-
         return Ok(new { result.Email, result.Role });
     }
 
@@ -39,11 +34,6 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
     {
         var result = await _authService.LoginAsync(dto);
-
-        // Log de Auditoria para Segurança
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogInformation("Login efetuado: {Email} - IP: {IP}", dto.Email, ip);
-
         SetTokenCookie(result.Token);
         return Ok(new { result.Email, result.Role });
     }
@@ -59,17 +49,40 @@ public class AuthController : ControllerBase
     [Authorize(Roles = "User")]
     public async Task<ActionResult<UserProfileDto>> GetProfile()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Ok(await _authService.GetProfileAsync(userId!));
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            // O serviço lança exceção se o usuário não for encontrado (ex: banco resetado)
+            var profile = await _authService.GetProfileAsync(userId);
+            return Ok(profile);
+        }
+        catch (Exception)
+        {
+            // SEGURANÇA: Se der erro ao buscar perfil, assume token inválido/usuário deletado
+            // Força limpeza do cookie e retorna 401 para o front redirecionar
+            Response.Cookies.Delete("jwt");
+            return Unauthorized();
+        }
     }
 
     [HttpPut("profile")]
     [Authorize(Roles = "User")]
     public async Task<IActionResult> UpdateProfile(UpdateProfileDto dto)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        await _authService.UpdateProfileAsync(userId!, dto);
-        return NoContent();
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            await _authService.UpdateProfileAsync(userId, dto);
+            return NoContent();
+        }
+        catch
+        {
+            return Unauthorized();
+        }
     }
 
     private void SetTokenCookie(string token)

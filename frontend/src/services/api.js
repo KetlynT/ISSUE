@@ -1,29 +1,74 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
-// Configura o Axios para se comunicar com o backend
 const api = axios.create({
-  // Garante que usa a URL do ambiente ou o localhost padrão
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5150/api', 
   headers: {
     'Content-Type': 'application/json',
   },
-  // ESSENCIAL: Permite que o cookie de segurança (HttpOnly) seja enviado e recebido.
-  // Sem isso, o login seguro não funciona.
   withCredentials: true 
 });
 
-// Interceptor para tratar erros globais (como sessão expirada)
+let isRedirecting = false;
+
+const nuclearReset = (destination) => {
+    if (isRedirecting) return new Promise(() => {});
+    
+    if (window.location.pathname === destination) {
+        return new Promise(() => {});
+    }
+
+    isRedirecting = true;
+    console.clear();
+    console.warn(`Redirecionando para ${destination} devido a erro crítico.`);
+
+    // 1. SALVA O CONSENTIMENTO ANTES DE LIMPAR
+    const savedConsent = localStorage.getItem('lgpd_consent');
+
+    // 2. Limpa tudo
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 3. RESTAURA O CONSENTIMENTO
+    if (savedConsent) {
+        localStorage.setItem('lgpd_consent', savedConsent);
+    }
+
+    // Redirecionamento
+    window.location.href = destination;
+    return new Promise(() => {});
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Se der erro 401 (Não autorizado), significa que o cookie venceu ou é inválido
-    if (error.response && error.response.status === 401) {
-      // Evita loop infinito se já estiver na página de login
-      if (!window.location.pathname.includes('/login')) {
-          localStorage.removeItem('user'); // Limpa dados visuais do usuário
-          window.location.href = '/login'; // Redireciona
-      }
+  async (error) => {
+    const originalRequest = error.config || {};
+    const url = originalRequest.url || '';
+
+    // --- CENÁRIO 1: BACKEND OFF (Network Error) ---
+    if (error.code === "ERR_NETWORK" || !error.response) {
+        if (window.location.pathname === '/error') return new Promise(() => {});
+
+        if (url.includes('/login') || url.includes('/register') || window.location.pathname === '/login') {
+             toast.error("Servidor indisponível. Tente novamente.");
+             return Promise.reject(error);
+        }
+
+        return nuclearReset('/error');
     }
+
+    const status = error.response.status;
+
+    // --- CENÁRIO 2: SESSÃO INVÁLIDA (401/403) ---
+    if (status === 401 || status === 403) {
+        return nuclearReset('/login');
+    }
+
+    // --- CENÁRIO 3: ERRO CRÍTICO NO PERFIL (500) ---
+    if (status === 500 && (url.includes('/auth/profile') || url.includes('/user'))) {
+        return nuclearReset('/login');
+    }
+    
     return Promise.reject(error);
   }
 );

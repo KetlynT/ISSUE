@@ -127,6 +127,9 @@ builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 builder.Services.AddScoped<IAddressService, AddressService>();
 
+// --- NOVO: Serviço de Pagamento (Stripe) ---
+builder.Services.AddScoped<IPaymentService, StripePaymentService>();
+
 // 3. Infraestrutura
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();

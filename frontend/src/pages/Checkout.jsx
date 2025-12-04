@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { CartService } from '../services/cartService';
 import { AddressService } from '../services/addressService';
 import { ShippingService } from '../services/shippingService';
+import { PaymentService } from '../services/paymentService'; // NOVO
 import { useCart } from '../context/CartContext';
 import { Button } from '../components/ui/Button';
 import { AddressManager } from '../components/AddressManager';
 import { CouponInput } from '../components/CouponInput';
-import { MapPin, Truck, CheckCircle, Settings, AlertCircle, Plus } from 'lucide-react';
+import { MapPin, Truck, CheckCircle, Settings, AlertCircle, Plus, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Checkout = () => {
@@ -19,7 +20,9 @@ export const Checkout = () => {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingShipping, setLoadingShipping] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  
+  // Estado para indicar "Redirecionando para o Stripe..."
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const { cartItems, refreshCart } = useCart();
   const navigate = useNavigate();
@@ -69,24 +72,36 @@ export const Checkout = () => {
 
   const handleCheckout = async () => {
     if (!selectedAddress || !selectedShipping) return toast.error("Selecione endereço e frete.");
-    setProcessing(true);
+    
+    setIsRedirecting(true);
+    const toastId = toast.loading("Processando pedido...");
+
     try {
       const { id, userId, ...addressPayload } = selectedAddress; 
       
-      await CartService.checkout({
+      // 1. Cria o Pedido no Backend (Status: Pendente)
+      const order = await CartService.checkout({
         address: addressPayload,
         couponCode: coupon?.code,
-        shippingCost: selectedShipping.price,   // CORREÇÃO: Envia o custo
-        shippingMethod: selectedShipping.name   // CORREÇÃO: Envia o nome
+        shippingCost: selectedShipping.price,
+        shippingMethod: selectedShipping.name
       });
       
-      toast.success("Pedido realizado!");
+      toast.loading("Redirecionando para pagamento...", { id: toastId });
+
+      // 2. Chama o Backend para gerar a URL do Stripe
+      const { url } = await PaymentService.createCheckoutSession(order.id);
+
+      // 3. Limpa o carrinho local e redireciona
       await refreshCart();
-      navigate('/meus-pedidos');
+      
+      // Redirecionamento externo para o Stripe
+      window.location.href = url;
+
     } catch (error) {
-      toast.error(error.response?.data || "Erro ao processar.");
-    } finally {
-      setProcessing(false);
+      console.error(error);
+      toast.error(error.response?.data?.message || "Erro ao processar checkout.", { id: toastId });
+      setIsRedirecting(false);
     }
   };
 
@@ -115,7 +130,7 @@ export const Checkout = () => {
 
             {addresses.length === 0 ? (
                 <div className="text-center py-8 border-2 border-dashed rounded-lg">
-                    <p className="text-gray-500 mb-4">Nenhum endereço.</p>
+                    <p className="text-gray-500 mb-4">Nenhum endereço cadastrado.</p>
                     <Button onClick={() => setIsManageModalOpen(true)}>Cadastrar Agora</Button>
                 </div>
             ) : (
@@ -177,7 +192,20 @@ export const Checkout = () => {
             <div className="flex justify-between items-center text-xl font-extrabold text-gray-900 pt-4 border-t border-gray-100 mb-6">
                 <span>Total</span><span className="text-blue-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}</span>
             </div>
-            <Button onClick={handleCheckout} isLoading={processing} disabled={!selectedAddress || !selectedShipping} variant="success" className="w-full py-4 text-lg">Confirmar Pedido</Button>
+            
+            <Button 
+                onClick={handleCheckout} 
+                isLoading={isRedirecting} 
+                disabled={!selectedAddress || !selectedShipping || isRedirecting} 
+                variant="success" 
+                className="w-full py-4 text-lg shadow-green-500/30"
+            >
+                <CreditCard size={20}/> {isRedirecting ? 'Redirecionando...' : 'Pagar com Stripe'}
+            </Button>
+            
+            <p className="text-xs text-gray-400 text-center mt-3 flex items-center justify-center gap-1">
+                <Settings size={10}/> Ambiente Seguro Stripe
+            </p>
         </div>
       </div>
 
