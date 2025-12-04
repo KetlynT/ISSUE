@@ -130,11 +130,12 @@ builder.Services.AddAuthentication(options =>
         OnTokenValidated = async context =>
         {
             var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
-            var token = context.SecurityToken.RawData; // Pega o token bruto
-
-            if (await blacklistService.IsTokenBlacklistedAsync(token))
+            if (context.SecurityToken is System.IdentityModel.Tokens.Jwt.JwtSecurityToken jwtToken)
             {
-                context.Fail("Token revogado.");
+                if (await blacklistService.IsTokenBlacklistedAsync(jwtToken.RawData))
+                {
+                    context.Fail("Token revogado.");
+                }
             }
         }
     };

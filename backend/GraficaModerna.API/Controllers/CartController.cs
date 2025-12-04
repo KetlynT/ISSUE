@@ -65,12 +65,12 @@ public class CartController : ControllerBase
             if (string.IsNullOrEmpty(request.Address.ZipCode) || string.IsNullOrEmpty(request.Address.Street))
                 return BadRequest("Endereço de entrega inválido.");
 
-            // CORREÇÃO: Passa o frete para o serviço
+            // CORREÇÃO: Removemos o request.ShippingCost desta chamada
             var order = await _orderService.CreateOrderFromCartAsync(
                 GetUserId(),
                 request.Address,
                 request.CouponCode,
-                request.ShippingCost,
+                // request.ShippingCost,  <-- REMOVIDO: O backend calcula isso agora
                 request.ShippingMethod
             );
 
