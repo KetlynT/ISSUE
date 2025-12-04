@@ -13,10 +13,6 @@ public class StripeWebhookController : ControllerBase
     private readonly IOrderService _orderService;
     private readonly ILogger<StripeWebhookController> _logger;
 
-    // O segredo deve vir de Variável de Ambiente ou User Secrets (NUNCA hardcoded)
-    private string EndpointSecret => _configuration["Stripe:WebhookSecret"]
-        ?? throw new InvalidOperationException("Segredo do Webhook Stripe não configurado.");
-
     public StripeWebhookController(
         IConfiguration configuration,
         IOrderService orderService,
@@ -32,54 +28,66 @@ public class StripeWebhookController : ControllerBase
     {
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
 
+        // Tenta pegar o segredo do .env ou User Secrets
+        var endpointSecret = _configuration["Stripe:WebhookSecret"];
+
+        if (string.IsNullOrEmpty(endpointSecret))
+        {
+            _logger.LogError("Webhook Secret não configurado no servidor.");
+            return StatusCode(500);
+        }
+
         try
         {
-            // 1. SEGURANÇA MÁXIMA: Valida a assinatura do Stripe
-            // Isso garante que o JSON não foi forjado por um atacante
             var signature = Request.Headers["Stripe-Signature"];
 
+            // CORREÇÃO AQUI: throwOnApiVersionMismatch: false
+            // Isso permite que o Stripe envie eventos de uma versão mais nova sem quebrar o backend
             var stripeEvent = EventUtility.ConstructEvent(
                 json,
                 signature,
-                EndpointSecret
+                endpointSecret,
+                throwOnApiVersionMismatch: false
             );
 
-            // 2. Processa apenas eventos relevantes
+            // 2. Processa apenas o evento de Checkout Completado
             if (stripeEvent.Type == Events.CheckoutSessionCompleted)
             {
+                // Conversão segura com o 'as'
                 var session = stripeEvent.Data.Object as Session;
 
-                if (session != null && session.Metadata.ContainsKey("order_id"))
+                // Verifica se temos os metadados que enviamos na criação da sessão
+                if (session != null && session.Metadata != null && session.Metadata.TryGetValue("order_id", out var orderIdString))
                 {
-                    var orderIdString = session.Metadata["order_id"];
-                    var transactionId = session.PaymentIntentId; // ID da transação no Stripe
-
                     if (Guid.TryParse(orderIdString, out Guid orderId))
                     {
-                        _logger.LogInformation($"Pagamento confirmado pelo Stripe para o Pedido {orderId}. Transação: {transactionId}");
+                        var transactionId = session.PaymentIntentId;
 
-                        // 3. Atualiza o pedido (Idempotência garantida pelo OrderService)
+                        _logger.LogInformation($"Webhook recebido! Pagamento confirmado para o Pedido {orderId}. Transação: {transactionId}");
+
                         await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId);
                     }
                     else
                     {
-                        _logger.LogError($"Metadata 'order_id' inválido no evento Stripe: {orderIdString}");
+                        _logger.LogError($"ID de pedido inválido nos metadados do Webhook: {orderIdString}");
                     }
+                }
+                else
+                {
+                    _logger.LogWarning("Webhook recebido sem Metadata 'order_id'.");
                 }
             }
             else
             {
-                // Outros eventos (ex: pagamento falhou) podem ser tratados aqui
-                _logger.LogInformation($"Evento Stripe não tratado: {stripeEvent.Type}");
+                // Outros eventos
+                // _logger.LogInformation($"Evento ignorado: {stripeEvent.Type}");
             }
 
-            // Retorna 200 OK rapidamente para o Stripe não reenviar o evento
             return Ok();
         }
         catch (StripeException e)
         {
-            // Erro de assinatura ou formato inválido (Provável ataque ou config errada)
-            _logger.LogError(e, "Erro ao validar Webhook Stripe.");
+            _logger.LogError(e, "Erro de validação no Webhook Stripe.");
             return BadRequest();
         }
         catch (Exception e)

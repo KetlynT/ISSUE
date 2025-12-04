@@ -1,7 +1,7 @@
 import api from './api';
 
 export const CartService = {
-  // --- Cliente: Carrinho ---
+  // --- Cliente ---
   getCart: async () => {
     const response = await api.get('/cart');
     return response.data;
@@ -23,7 +23,6 @@ export const CartService = {
     await api.delete('/cart');
   },
 
-  // --- Cliente: Checkout & Pedidos ---
   checkout: async (checkoutData) => {
     const response = await api.post('/cart/checkout', checkoutData);
     return response.data;
@@ -39,19 +38,20 @@ export const CartService = {
     return response.data;
   },
 
-  // NOVO: Solicitar Reembolso
   requestRefund: async (orderId) => {
     const response = await api.post(`/orders/${orderId}/request-refund`);
     return response.data;
   },
 
-  // --- Admin: Gestão de Pedidos ---
+  // --- Admin ---
   getAllOrders: async () => {
     const response = await api.get('/orders/admin/all');
     return response.data;
   },
 
-  updateOrderStatus: async (orderId, newStatus, trackingCode = null) => {
-    await api.patch(`/orders/${orderId}/status`, { status: newStatus, trackingCode });
+  // ATUALIZADO: Agora aceita um objeto DTO completo
+  updateOrderStatus: async (orderId, updateData) => {
+    // updateData espera: { status, trackingCode, reverseLogisticsCode, returnInstructions }
+    await api.patch(`/orders/${orderId}/status`, updateData);
   }
 };

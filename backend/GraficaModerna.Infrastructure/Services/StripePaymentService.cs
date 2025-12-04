@@ -13,7 +13,6 @@ public class StripePaymentService : IPaymentService
     public StripePaymentService(IConfiguration configuration)
     {
         _configuration = configuration;
-        // Inicializa a chave secreta globalmente ao instanciar o serviço
         StripeConfiguration.ApiKey = _configuration["Stripe:SecretKey"];
     }
 
@@ -34,14 +33,13 @@ public class StripePaymentService : IPaymentService
             LineItems = new List<SessionLineItemOptions>()
         };
 
-        // Adiciona os produtos do pedido
         foreach (var item in order.Items)
         {
             options.LineItems.Add(new SessionLineItemOptions
             {
                 PriceData = new SessionLineItemPriceDataOptions
                 {
-                    UnitAmountDecimal = item.UnitPrice * 100, // Stripe trabalha com centavos
+                    UnitAmountDecimal = item.UnitPrice * 100,
                     Currency = "brl",
                     ProductData = new SessionLineItemPriceDataProductDataOptions
                     {
@@ -52,7 +50,6 @@ public class StripePaymentService : IPaymentService
             });
         }
 
-        // Adiciona o Frete
         if (order.ShippingCost > 0)
         {
             options.LineItems.Add(new SessionLineItemOptions
@@ -70,11 +67,8 @@ public class StripePaymentService : IPaymentService
             });
         }
 
-        // Adiciona o Desconto (se houver)
         if (order.Discount > 0)
         {
-            // CORREÇÃO AQUI: Usamos 'Stripe.CouponService' explicitamente para evitar conflito
-            // com a classe CouponService do seu próprio projeto.
             var couponOptions = new CouponCreateOptions
             {
                 AmountOff = (long)(order.Discount * 100),
@@ -92,10 +86,34 @@ public class StripePaymentService : IPaymentService
             };
         }
 
-        // Cria a sessão
         var service = new SessionService();
         Session session = await service.CreateAsync(options);
 
         return session.Url;
+    }
+
+    // --- NOVO: Implementação do Reembolso ---
+    public async Task RefundPaymentAsync(string paymentIntentId)
+    {
+        if (string.IsNullOrEmpty(paymentIntentId))
+            throw new ArgumentException("ID da transação inválido para reembolso.");
+
+        var refundService = new RefundService();
+        var options = new RefundCreateOptions
+        {
+            PaymentIntent = paymentIntentId,
+            Reason = RefundReasons.RequestedByCustomer // Ou 'duplicate', 'fraudulent'
+        };
+
+        try
+        {
+            await refundService.CreateAsync(options);
+        }
+        catch (StripeException ex)
+        {
+            // Se já foi reembolsado, o Stripe lança erro. Podemos tratar ou repassar.
+            // Aqui vamos lançar uma exceção amigável.
+            throw new Exception($"Erro ao processar reembolso no Stripe: {ex.StripeError.Message}");
+        }
     }
 }

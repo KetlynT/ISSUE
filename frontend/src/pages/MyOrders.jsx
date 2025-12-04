@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CartService } from '../services/cartService';
-import { PaymentService } from '../services/paymentService'; // Importar PaymentService
-import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box, Info } from 'lucide-react';
+import { PaymentService } from '../services/paymentService'; 
+import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
@@ -34,13 +34,12 @@ export const MyOrders = () => {
     setExpandedOrderId(expandedOrderId === id ? null : id);
   };
 
-  // NOVA LÓGICA: Pagar via Stripe para pedidos pendentes
   const handlePay = async (e, orderId) => {
     e.stopPropagation();
     const loadingToast = toast.loading("Iniciando pagamento...");
     try {
         const { url } = await PaymentService.createCheckoutSession(orderId);
-        window.location.href = url; // Redireciona para Stripe
+        window.location.href = url;
     } catch (error) {
         toast.error("Erro ao iniciar pagamento.", { id: loadingToast });
     }
@@ -118,7 +117,6 @@ export const MyOrders = () => {
                         <div className="text-xs text-gray-500 uppercase font-bold">Total</div>
                         <div className="text-xl font-bold text-green-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.totalAmount)}</div>
                     </div>
-                    {/* Botão de Pagar agora leva para o Stripe */}
                     {order.status === 'Pendente' && <Button size="sm" onClick={(e) => handlePay(e, order.id)}><CreditCard size={16} /> Pagar</Button>}
                     {expandedOrderId === order.id ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
                 </div>
@@ -128,6 +126,7 @@ export const MyOrders = () => {
                 {expandedOrderId === order.id && (
                     <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden border-t border-gray-100">
                         <div className="p-6 bg-white">
+                            {/* Logística Reversa */}
                             {order.reverseLogisticsCode && (
                                 <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
                                     <h4 className="text-orange-800 font-bold flex items-center gap-2 mb-2"><Box size={18}/> Instruções de Devolução</h4>
@@ -139,6 +138,7 @@ export const MyOrders = () => {
                                 </div>
                             )}
 
+                            {/* Endereço e Rastreio */}
                             <div className="mb-6 flex flex-col md:flex-row justify-between gap-4">
                                 <div className="flex items-start gap-2 text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100 flex-1">
                                     <MapPin size={18} className="mt-0.5 text-blue-600" />
@@ -150,8 +150,9 @@ export const MyOrders = () => {
                                 </div>
                             </div>
 
-                            <table className="w-full text-left text-sm mb-6">
-                                <tbody className="divide-y">
+                            {/* Tabela de Itens */}
+                            <table className="w-full text-left text-sm mb-4">
+                                <tbody className="divide-y border-b border-gray-100">
                                     {order.items.map((item, idx) => (
                                         <tr key={idx}>
                                             <td className="py-2 font-medium text-gray-800">{item.quantity}x {item.productName}</td>
@@ -161,6 +162,32 @@ export const MyOrders = () => {
                                 </tbody>
                             </table>
 
+                            {/* NOVO: Resumo de Valores (Subtotal, Frete, Total) */}
+                            <div className="flex flex-col items-end gap-1 text-sm text-gray-700 mb-6">
+                                <div className="flex justify-between w-full max-w-[240px]">
+                                    <span>Subtotal:</span>
+                                    <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.subTotal || 0)}</span>
+                                </div>
+                                
+                                {order.discount > 0 && (
+                                    <div className="flex justify-between w-full max-w-[240px] text-green-600">
+                                        <span>Desconto:</span>
+                                        <span>- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.discount)}</span>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between w-full max-w-[240px] text-blue-600">
+                                    <span>Frete:</span>
+                                    <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.shippingCost || 0)}</span>
+                                </div>
+
+                                <div className="flex justify-between w-full max-w-[240px] font-bold text-lg mt-2 border-t pt-2 border-gray-200">
+                                    <span>Total:</span>
+                                    <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.totalAmount)}</span>
+                                </div>
+                            </div>
+
+                            {/* Botão de Ação */}
                             {showSection && (
                                 <div className="border-t pt-3 flex justify-end">
                                     <button

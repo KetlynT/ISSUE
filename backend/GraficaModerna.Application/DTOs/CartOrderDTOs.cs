@@ -26,10 +26,13 @@ public record OrderDto(
     Guid Id,
     DateTime OrderDate,
     DateTime? DeliveryDate,
+    // NOVOS CAMPOS PARA EXIBIÇÃO DETALHADA
+    decimal SubTotal,
+    decimal Discount,
+    decimal ShippingCost,
     decimal TotalAmount,
     string Status,
     string? TrackingCode,
-    // NOVOS CAMPOS DE VISUALIZAÇÃO
     string? ReverseLogisticsCode,
     string? ReturnInstructions,
     string ShippingAddress,
@@ -42,6 +45,6 @@ public record OrderItemDto(string ProductName, int Quantity, decimal UnitPrice, 
 public record UpdateOrderStatusDto(
     string Status,
     string? TrackingCode,
-    string? ReverseLogisticsCode, // Admin pode enviar isso agora
-    string? ReturnInstructions    // E isso
+    string? ReverseLogisticsCode,
+    string? ReturnInstructions
 );

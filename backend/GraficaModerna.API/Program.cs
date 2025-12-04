@@ -166,10 +166,11 @@ app.Use(async (context, next) =>
 
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
-app.UseResponseCompression();
 
+// CORREÇÃO: Desabilita compressão em ambiente de desenvolvimento para não quebrar Hot Reload/Browser Link
 if (!app.Environment.IsDevelopment())
 {
+    app.UseResponseCompression();
     app.UseHttpsRedirection();
 }
 

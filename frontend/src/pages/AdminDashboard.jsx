@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { 
   LogOut, Edit, Trash2, Package, Settings, FileText, 
   Box, Truck, BarChart2, AlertTriangle, DollarSign, 
-  ShoppingBag, Tag, Search, Eye, X 
+  ShoppingBag, Tag, Search, Eye, X, RefreshCcw 
 } from 'lucide-react';
 
 import ReactQuill from 'react-quill';
@@ -72,6 +72,7 @@ export const AdminDashboard = () => {
   );
 };
 
+// ... (Componentes TabButton e InputGroup mantidos iguais, omitidos para brevidade)
 const TabButton = ({ active, onClick, children, icon }) => (
     <button 
         onClick={onClick}
@@ -95,7 +96,7 @@ const InputGroup = ({ label, name, value, onChange, type = "text", placeholder }
     </div>
 );
 
-// --- ABA: VISÃO GERAL ---
+// ... (OverviewTab mantido igual)
 const OverviewTab = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -145,7 +146,7 @@ const OverviewTab = () => {
     );
 };
 
-// --- ABA: PEDIDOS (CORRIGIDA) ---
+// --- ABA: PEDIDOS (ATUALIZADA) ---
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);
     const [filteredOrders, setFilteredOrders] = useState([]);
@@ -154,8 +155,12 @@ const OrdersTab = () => {
     const [statusFilter, setStatusFilter] = useState('Todos');
     
     const [selectedOrder, setSelectedOrder] = useState(null);
+    
+    // Estados do Formulário de Edição
     const [trackingInput, setTrackingInput] = useState('');
     const [statusInput, setStatusInput] = useState('');
+    const [reverseCodeInput, setReverseCodeInput] = useState(''); // NOVO
+    const [returnInstructionsInput, setReturnInstructionsInput] = useState(''); // NOVO
 
     useEffect(() => { loadOrders(); }, []);
 
@@ -189,6 +194,8 @@ const OrdersTab = () => {
         setSelectedOrder(order);
         setStatusInput(order.status);
         setTrackingInput(order.trackingCode || '');
+        setReverseCodeInput(order.reverseLogisticsCode || '');
+        setReturnInstructionsInput(order.returnInstructions || '');
     };
 
     const handleCloseModal = () => {
@@ -197,16 +204,29 @@ const OrdersTab = () => {
 
     const handleUpdateOrder = async (e) => {
         e.preventDefault();
+        const toastId = toast.loading("Atualizando...");
         try {
-            await CartService.updateOrderStatus(selectedOrder.id, statusInput, trackingInput);
+            // Envia o objeto DTO completo
+            await CartService.updateOrderStatus(selectedOrder.id, {
+                status: statusInput,
+                trackingCode: trackingInput,
+                reverseLogisticsCode: reverseCodeInput,
+                returnInstructions: returnInstructionsInput
+            });
             
-            const updatedList = orders.map(o => o.id === selectedOrder.id ? {...o, status: statusInput, trackingCode: trackingInput} : o);
+            const updatedList = orders.map(o => o.id === selectedOrder.id ? {
+                ...o, 
+                status: statusInput, 
+                trackingCode: trackingInput,
+                reverseLogisticsCode: reverseCodeInput,
+                returnInstructions: returnInstructionsInput
+            } : o);
+            
             setOrders(updatedList);
-            
-            toast.success("Pedido atualizado com sucesso!");
+            toast.success("Pedido atualizado com sucesso!", { id: toastId });
             handleCloseModal();
         } catch (err) {
-            toast.error("Erro ao atualizar pedido.");
+            toast.error("Erro ao atualizar pedido.", { id: toastId });
         }
     };
 
@@ -238,6 +258,7 @@ const OrdersTab = () => {
                         <option value="Entregue">Entregue</option>
                         <option value="Cancelado">Cancelado</option>
                         <option value="Reembolso Solicitado">Reembolso Solicitado</option>
+                        <option value="Aguardando Devolução">Aguardando Devolução</option>
                         <option value="Reembolsado">Reembolsado</option>
                     </select>
                 </div>
@@ -307,15 +328,10 @@ const OrdersTab = () => {
                                 </div>
                             </div>
 
-                            <div>
-                                <h4 className="font-bold text-sm text-gray-500 uppercase mb-2">Entrega</h4>
-                                <p className="text-gray-700 text-sm border p-3 rounded bg-gray-50">{selectedOrder.shippingAddress}</p>
-                            </div>
-
                             <form onSubmit={handleUpdateOrder} className="bg-blue-50 p-5 rounded-xl border border-blue-100">
                                 <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2"><Settings size={18}/> Gerenciar Pedido</h4>
                                 
-                                <div className="grid md:grid-cols-2 gap-4 mb-4">
+                                <div className="grid gap-4 mb-4">
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 mb-1">Status</label>
                                         <select 
@@ -329,12 +345,25 @@ const OrdersTab = () => {
                                             <option value="Entregue">Entregue</option>
                                             <option value="Cancelado">Cancelado</option>
                                             <option value="Reembolso Solicitado">Reembolso Solicitado</option>
+                                            <option value="Aguardando Devolução">Aguardando Devolução</option>
                                             <option value="Reembolsado">Reembolsado</option>
                                         </select>
                                     </div>
+
+                                    {/* MENSAGEM DE ALERTA PARA REEMBOLSO AUTOMÁTICO */}
+                                    {(statusInput === 'Reembolsado' || statusInput === 'Cancelado') && (
+                                        <div className="bg-orange-100 border border-orange-300 text-orange-800 p-3 rounded text-sm flex gap-2 items-start">
+                                            <RefreshCcw size={18} className="mt-0.5 shrink-0"/>
+                                            <div>
+                                                <strong>Atenção:</strong> Ao salvar como "{statusInput}", o sistema tentará processar o estorno 
+                                                automaticamente no Stripe (se o pagamento foi feito por lá).
+                                            </div>
+                                        </div>
+                                    )}
                                     
+                                    {/* CAMPOS PADRÃO */}
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-600 mb-1">Código de Rastreio</label>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">Código de Rastreio (Envio)</label>
                                         <input 
                                             className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500"
                                             placeholder="Ex: AA123456789BR"
@@ -342,6 +371,31 @@ const OrdersTab = () => {
                                             onChange={e => setTrackingInput(e.target.value)}
                                         />
                                     </div>
+
+                                    {/* CAMPOS DE LOGÍSTICA REVERSA (Só aparecem se o status for relevante) */}
+                                    {statusInput === 'Aguardando Devolução' && (
+                                        <div className="bg-white p-4 rounded border border-gray-200 space-y-3 animate-in fade-in">
+                                            <h5 className="font-bold text-xs text-gray-500 uppercase border-b pb-1 mb-2">Dados de Devolução</h5>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-600 mb-1">Código de Postagem (Reverso)</label>
+                                                <input 
+                                                    className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500"
+                                                    placeholder="Código dos Correios para o cliente devolver"
+                                                    value={reverseCodeInput}
+                                                    onChange={e => setReverseCodeInput(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-600 mb-1">Instruções para o Cliente</label>
+                                                <textarea 
+                                                    className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500 h-20 resize-none"
+                                                    placeholder="Ex: Leve à agência com este código..."
+                                                    value={returnInstructionsInput}
+                                                    onChange={e => setReturnInstructionsInput(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex justify-end gap-3">
@@ -365,6 +419,7 @@ const OrderStatusBadge = ({ status }) => {
         'Entregue': 'bg-green-100 text-green-800',
         'Cancelado': 'bg-red-100 text-red-800',
         'Reembolso Solicitado': 'bg-purple-100 text-purple-800',
+        'Aguardando Devolução': 'bg-orange-100 text-orange-800',
         'Reembolsado': 'bg-gray-800 text-white'
     };
     return (
@@ -374,7 +429,6 @@ const OrderStatusBadge = ({ status }) => {
     );
 };
 
-// --- ABA: PRODUTOS ---
 const ProductsTab = () => {
   const [products, setProducts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -397,6 +451,7 @@ const ProductsTab = () => {
 
   const loadProducts = async () => {
       try {
+          // Carrega todos os produtos (página 1, limite alto para ver tudo)
           const data = await ProductService.getAll(1, 100);
           setProducts(data.items);
       } catch (e) { toast.error("Erro ao carregar produtos"); }
@@ -548,7 +603,6 @@ const ProductsTab = () => {
   );
 };
 
-// --- ABA: CUPONS ---
 const CouponsTab = () => {
     const [coupons, setCoupons] = useState([]);
     const [form, setForm] = useState({ code: '', discountPercentage: '', validityDays: '30' });
@@ -634,7 +688,6 @@ const CouponsTab = () => {
     );
 };
 
-// --- ABA: CONFIGURAÇÕES ---
 const SettingsTab = () => {
     const [formData, setFormData] = useState({});
     const [heroImageFile, setHeroImageFile] = useState(null);
@@ -690,7 +743,6 @@ const SettingsTab = () => {
     );
 };
 
-// --- ABA: PÁGINAS ---
 const PagesTab = () => {
     const [pages, setPages] = useState([]);
     const [selectedPage, setSelectedPage] = useState(null);
