@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { 
   LogOut, Edit, Trash2, Package, Settings, FileText, 
   Box, Truck, BarChart2, AlertTriangle, DollarSign, 
-  ShoppingBag, Tag, Search, Eye, X, RefreshCcw 
+  ShoppingBag, Tag, Search, Eye, X, RefreshCcw, ArrowUp, ArrowDown, ArrowUpDown 
 } from 'lucide-react';
 
 import ReactQuill from 'react-quill';
@@ -72,7 +72,7 @@ export const AdminDashboard = () => {
   );
 };
 
-// ... (Componentes TabButton e InputGroup mantidos iguais, omitidos para brevidade)
+// Componentes Auxiliares
 const TabButton = ({ active, onClick, children, icon }) => (
     <button 
         onClick={onClick}
@@ -96,7 +96,7 @@ const InputGroup = ({ label, name, value, onChange, type = "text", placeholder }
     </div>
 );
 
-// ... (OverviewTab mantido igual)
+// --- ABA: VISÃO GERAL (Atualizada com Reembolso) ---
 const OverviewTab = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -113,40 +113,264 @@ const OverviewTab = () => {
 
     return (
         <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="text-gray-500 text-sm font-bold uppercase">Receita Total</div>
+                        <div className="text-gray-500 text-xs font-bold uppercase">Receita Líquida</div>
                         <div className="p-2 bg-green-100 text-green-600 rounded-lg"><DollarSign size={20}/></div>
                     </div>
-                    <div className="text-3xl font-bold text-gray-800">
+                    <div className="text-2xl font-bold text-gray-800">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalRevenue)}
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="text-gray-500 text-xs font-bold uppercase">Total Reembolsado</div>
+                        <div className="p-2 bg-purple-100 text-purple-600 rounded-lg"><RefreshCcw size={20}/></div>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-800">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalRefunded || 0)}
                     </div>
                 </div>
                 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="text-gray-500 text-sm font-bold uppercase">Pedidos Totais</div>
+                        <div className="text-gray-500 text-xs font-bold uppercase">Pedidos Totais</div>
                         <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ShoppingBag size={20}/></div>
                     </div>
-                    <div className="text-3xl font-bold text-gray-800">{stats.totalOrders}</div>
+                    <div className="text-2xl font-bold text-gray-800">{stats.totalOrders}</div>
                     <div className="text-xs text-gray-500 mt-1">{stats.pendingOrders} pendentes de envio</div>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="text-gray-500 text-sm font-bold uppercase">Alerta de Estoque</div>
+                        <div className="text-gray-500 text-xs font-bold uppercase">Alerta de Estoque</div>
                         <div className="p-2 bg-red-100 text-red-600 rounded-lg"><AlertTriangle size={20}/></div>
                     </div>
-                    <div className="text-3xl font-bold text-gray-800">{stats.lowStockProducts.length}</div>
-                    <div className="text-xs text-gray-500 mt-1">Produtos com menos de 10 un.</div>
+                    <div className="text-2xl font-bold text-gray-800">{stats.lowStockProducts.length}</div>
+                    <div className="text-xs text-gray-500 mt-1">Itens críticos</div>
                 </div>
             </div>
         </div>
     );
 };
 
-// --- ABA: PEDIDOS (ATUALIZADA) ---
+// --- ABA: PRODUTOS (Com Filtro e Ordenação) ---
+const ProductsTab = () => {
+  const [products, setProducts] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  
+  // Estado para filtros
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Formulário
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [price, setPrice] = useState('');
+  const [stock, setStock] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [weight, setWeight] = useState('');
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
+  const [length, setLength] = useState('');
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadProducts(); }, [sortConfig, searchTerm]);
+
+  const loadProducts = async () => {
+      try {
+          // Passa os parâmetros de ordenação para a API (O backend já suporta search/sort/order)
+          const data = await ProductService.getAll(1, 100, searchTerm, sortConfig.key, sortConfig.direction);
+          setProducts(data.items);
+      } catch (e) { toast.error("Erro ao carregar produtos"); }
+  };
+
+  const handleSort = (key) => {
+      let direction = 'asc';
+      if (sortConfig.key === key && sortConfig.direction === 'asc') {
+          direction = 'desc';
+      }
+      setSortConfig({ key, direction });
+  };
+
+  // Ícone de ordenação
+  const SortIcon = ({ column }) => {
+      if (sortConfig.key !== column) return <ArrowUpDown size={14} className="text-gray-300 ml-1 inline" />;
+      return sortConfig.direction === 'asc' 
+          ? <ArrowUp size={14} className="text-blue-600 ml-1 inline" /> 
+          : <ArrowDown size={14} className="text-blue-600 ml-1 inline" />;
+  };
+
+  const handleSave = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      try {
+          let imageUrl = editingProduct?.imageUrl || '';
+          if(imageFile) imageUrl = await ProductService.uploadImage(imageFile);
+
+          const data = { 
+              name, 
+              description: desc, 
+              price: parseFloat(price), 
+              imageUrl,
+              stockQuantity: parseInt(stock),
+              weight: parseFloat(weight),
+              width: parseInt(width),
+              height: parseInt(height),
+              length: parseInt(length)
+          };
+          
+          if(editingProduct) await ProductService.update(editingProduct.id, data);
+          else await ProductService.create(data);
+
+          setIsModalOpen(false);
+          setImageFile(null);
+          loadProducts();
+          toast.success("Salvo com sucesso!");
+      } catch (e) { 
+          toast.error("Erro ao salvar. Verifique os campos."); 
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  const handleDelete = async (id) => {
+      if(!window.confirm("Tem certeza que deseja excluir este produto?")) return;
+      try {
+          await ProductService.delete(id);
+          loadProducts();
+          toast.success("Excluído!");
+      } catch(e) { toast.error("Erro ao excluir"); }
+  };
+
+  const openModal = (p = null) => {
+      setEditingProduct(p);
+      setName(p?.name || '');
+      setDesc(p?.description || '');
+      setPrice(p?.price || '');
+      setStock(p?.stockQuantity || '');
+      setWeight(p?.weight || '');
+      setWidth(p?.width || '');
+      setHeight(p?.height || '');
+      setLength(p?.length || '');
+      setImageFile(null);
+      setIsModalOpen(true);
+  };
+
+  return (
+      <div>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+              <h2 className="text-xl font-bold text-gray-800">Catálogo de Produtos</h2>
+              <div className="flex gap-2 w-full md:w-auto">
+                  <div className="relative flex-grow">
+                      <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                      <input 
+                          className="pl-10 pr-4 py-2 border rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                          placeholder="Buscar por nome..."
+                          value={searchTerm}
+                          onChange={e => setSearchTerm(e.target.value)}
+                      />
+                  </div>
+                  <Button onClick={() => openModal()} size="sm">+ Novo</Button>
+              </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow border overflow-hidden">
+              <table className="w-full text-left">
+                  <thead className="bg-gray-50 border-b text-gray-600 text-sm uppercase font-bold">
+                      <tr>
+                          <th className="p-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('name')}>
+                              Produto <SortIcon column="name" />
+                          </th>
+                          <th className="p-4 text-center cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('stockQuantity')}>
+                              Estoque <SortIcon column="stockQuantity" />
+                          </th>
+                          <th className="p-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('price')}>
+                              Preço <SortIcon column="price" />
+                          </th>
+                          <th className="p-4 text-right">Ações</th>
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                      {products.map(p => (
+                          <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="p-4 align-middle">
+                                  <div className="font-bold text-gray-800">{p.name}</div>
+                                  <div className="text-xs text-gray-500 truncate max-w-xs">{p.description}</div>
+                              </td>
+                              <td className="p-4 text-center align-middle">
+                                  <span className={`px-2 py-1 rounded text-xs font-bold ${p.stockQuantity < 10 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                                    {p.stockQuantity} un
+                                  </span>
+                              </td>
+                              <td className="p-4 align-middle font-mono text-blue-600">R$ {p.price.toFixed(2)}</td>
+                              <td className="p-4 text-right align-middle">
+                                  <div className="flex justify-end gap-2">
+                                    <button onClick={() => openModal(p)} className="text-blue-600 hover:bg-blue-50 p-2 rounded"><Edit size={18}/></button>
+                                    <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:bg-red-50 p-2 rounded"><Trash2 size={18}/></button>
+                                  </div>
+                              </td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+          </div>
+
+          {/* Modal de Produto (Omitido para não repetir código, mantém o mesmo) */}
+          {isModalOpen && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-10">
+                  <form onSubmit={handleSave} className="bg-white p-8 rounded-xl w-full max-w-2xl space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200 my-auto">
+                      <h3 className="font-bold text-2xl text-gray-800 border-b pb-2">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h3>
+                      
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Nome</label>
+                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={name} onChange={e=>setName(e.target.value)} required />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Descrição</label>
+                            <textarea className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none" value={desc} onChange={e=>setDesc(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Preço (R$)</label>
+                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} required />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Estoque</label>
+                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="number" value={stock} onChange={e=>setStock(e.target.value)} required />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Imagem</label>
+                            <input type="file" onChange={e=>setImageFile(e.target.files[0])} className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
+                        <h4 className="font-bold text-sm text-gray-700 mb-3 flex items-center gap-2"><Box size={16}/> Dados para Frete</h4>
+                        <div className="grid grid-cols-4 gap-4">
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Peso (kg)</label><input type="number" step="0.001" className="w-full border p-2 rounded text-sm" value={weight} onChange={e=>setWeight(e.target.value)} required /></div>
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Largura</label><input type="number" className="w-full border p-2 rounded text-sm" value={width} onChange={e=>setWidth(e.target.value)} required /></div>
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Altura</label><input type="number" className="w-full border p-2 rounded text-sm" value={height} onChange={e=>setHeight(e.target.value)} required /></div>
+                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Comp.</label><input type="number" className="w-full border p-2 rounded text-sm" value={length} onChange={e=>setLength(e.target.value)} required /></div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-4">
+                          <Button type="button" variant="ghost" onClick={()=>setIsModalOpen(false)}>Cancelar</Button>
+                          <Button type="submit" isLoading={loading}>Salvar</Button>
+                      </div>
+                  </form>
+              </div>
+          )}
+      </div>
+  );
+};
+
+// --- ABA: PEDIDOS (Correção de Alinhamento) ---
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);
     const [filteredOrders, setFilteredOrders] = useState([]);
@@ -155,12 +379,10 @@ const OrdersTab = () => {
     const [statusFilter, setStatusFilter] = useState('Todos');
     
     const [selectedOrder, setSelectedOrder] = useState(null);
-    
-    // Estados do Formulário de Edição
     const [trackingInput, setTrackingInput] = useState('');
     const [statusInput, setStatusInput] = useState('');
-    const [reverseCodeInput, setReverseCodeInput] = useState(''); // NOVO
-    const [returnInstructionsInput, setReturnInstructionsInput] = useState(''); // NOVO
+    const [reverseCodeInput, setReverseCodeInput] = useState('');
+    const [returnInstructionsInput, setReturnInstructionsInput] = useState('');
 
     useEffect(() => { loadOrders(); }, []);
 
@@ -206,7 +428,6 @@ const OrdersTab = () => {
         e.preventDefault();
         const toastId = toast.loading("Atualizando...");
         try {
-            // Envia o objeto DTO completo
             await CartService.updateOrderStatus(selectedOrder.id, {
                 status: statusInput,
                 trackingCode: trackingInput,
@@ -278,23 +499,25 @@ const OrdersTab = () => {
                     <tbody className="divide-y divide-gray-100">
                         {filteredOrders.map(o => (
                             <tr key={o.id} className="hover:bg-gray-50">
-                                <td className="p-4">
+                                <td className="p-4 align-middle">
                                     <div className="font-bold text-gray-800 font-mono">#{o.id.slice(0, 8)}</div>
                                     <div className="text-xs text-gray-500">{new Date(o.orderDate).toLocaleDateString('pt-BR')}</div>
                                 </td>
-                                <td className="p-4">
+                                <td className="p-4 align-middle">
                                     <OrderStatusBadge status={o.status} />
                                 </td>
-                                <td className="p-4 font-mono text-xs text-gray-600">
+                                <td className="p-4 align-middle font-mono text-xs text-gray-600">
                                     {o.trackingCode || '-'}
                                 </td>
-                                <td className="p-4 text-right font-bold text-green-700">
+                                <td className="p-4 text-right align-middle font-bold text-green-700">
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}
                                 </td>
-                                <td className="p-4 text-right">
-                                    <Button size="sm" variant="ghost" onClick={() => handleOpenModal(o)} className="text-blue-600 hover:bg-blue-50">
-                                        <Eye size={18} /> Detalhes
-                                    </Button>
+                                <td className="p-4 text-right align-middle">
+                                    <div className="flex justify-end">
+                                        <Button size="sm" variant="ghost" onClick={() => handleOpenModal(o)} className="text-blue-600 hover:bg-blue-50">
+                                            <Eye size={18} /> Detalhes
+                                        </Button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -350,7 +573,6 @@ const OrdersTab = () => {
                                         </select>
                                     </div>
 
-                                    {/* MENSAGEM DE ALERTA PARA REEMBOLSO AUTOMÁTICO */}
                                     {(statusInput === 'Reembolsado' || statusInput === 'Cancelado') && (
                                         <div className="bg-orange-100 border border-orange-300 text-orange-800 p-3 rounded text-sm flex gap-2 items-start">
                                             <RefreshCcw size={18} className="mt-0.5 shrink-0"/>
@@ -361,7 +583,6 @@ const OrdersTab = () => {
                                         </div>
                                     )}
                                     
-                                    {/* CAMPOS PADRÃO */}
                                     <div>
                                         <label className="block text-xs font-bold text-gray-600 mb-1">Código de Rastreio (Envio)</label>
                                         <input 
@@ -372,7 +593,6 @@ const OrdersTab = () => {
                                         />
                                     </div>
 
-                                    {/* CAMPOS DE LOGÍSTICA REVERSA (Só aparecem se o status for relevante) */}
                                     {statusInput === 'Aguardando Devolução' && (
                                         <div className="bg-white p-4 rounded border border-gray-200 space-y-3 animate-in fade-in">
                                             <h5 className="font-bold text-xs text-gray-500 uppercase border-b pb-1 mb-2">Dados de Devolução</h5>
@@ -427,180 +647,6 @@ const OrderStatusBadge = ({ status }) => {
             {status}
         </span>
     );
-};
-
-const ProductsTab = () => {
-  const [products, setProducts] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-  
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
-  const [price, setPrice] = useState('');
-  const [stock, setStock] = useState('');
-  const [imageFile, setImageFile] = useState(null);
-  
-  const [weight, setWeight] = useState('');
-  const [width, setWidth] = useState('');
-  const [height, setHeight] = useState('');
-  const [length, setLength] = useState('');
-
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => { loadProducts(); }, []);
-
-  const loadProducts = async () => {
-      try {
-          // Carrega todos os produtos (página 1, limite alto para ver tudo)
-          const data = await ProductService.getAll(1, 100);
-          setProducts(data.items);
-      } catch (e) { toast.error("Erro ao carregar produtos"); }
-  };
-
-  const handleSave = async (e) => {
-      e.preventDefault();
-      setLoading(true);
-      try {
-          let imageUrl = editingProduct?.imageUrl || '';
-          if(imageFile) imageUrl = await ProductService.uploadImage(imageFile);
-
-          const data = { 
-              name, 
-              description: desc, 
-              price: parseFloat(price), 
-              imageUrl,
-              stockQuantity: parseInt(stock),
-              weight: parseFloat(weight),
-              width: parseInt(width),
-              height: parseInt(height),
-              length: parseInt(length)
-          };
-          
-          if(editingProduct) await ProductService.update(editingProduct.id, data);
-          else await ProductService.create(data);
-
-          setIsModalOpen(false);
-          setImageFile(null);
-          loadProducts();
-          toast.success("Salvo com sucesso!");
-      } catch (e) { 
-          toast.error("Erro ao salvar. Verifique os campos."); 
-      } finally {
-          setLoading(false);
-      }
-  };
-
-  const handleDelete = async (id) => {
-      if(!window.confirm("Tem certeza que deseja excluir este produto?")) return;
-      try {
-          await ProductService.delete(id);
-          loadProducts();
-          toast.success("Excluído!");
-      } catch(e) { toast.error("Erro ao excluir"); }
-  };
-
-  const openModal = (p = null) => {
-      setEditingProduct(p);
-      setName(p?.name || '');
-      setDesc(p?.description || '');
-      setPrice(p?.price || '');
-      setStock(p?.stockQuantity || '');
-      
-      setWeight(p?.weight || '');
-      setWidth(p?.width || '');
-      setHeight(p?.height || '');
-      setLength(p?.length || '');
-
-      setImageFile(null);
-      setIsModalOpen(true);
-  };
-
-  return (
-      <div>
-          <div className="flex justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800">Catálogo de Produtos</h2>
-              <Button onClick={() => openModal()}>+ Novo Produto</Button>
-          </div>
-          <div className="bg-white rounded-lg shadow border overflow-hidden">
-              <table className="w-full text-left">
-                  <thead className="bg-gray-50 border-b text-gray-600 text-sm uppercase">
-                      <tr>
-                          <th className="p-4 font-bold">Produto</th>
-                          <th className="p-4 font-bold text-center">Estoque</th>
-                          <th className="p-4 font-bold">Preço</th>
-                          <th className="p-4 text-right font-bold">Ações</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                      {products.map(p => (
-                          <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="p-4">
-                                  <div className="font-bold text-gray-800">{p.name}</div>
-                                  <div className="text-xs text-gray-500 truncate max-w-xs">{p.description}</div>
-                              </td>
-                              <td className="p-4 text-center">
-                                  <span className={`px-2 py-1 rounded text-xs font-bold ${p.stockQuantity < 10 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-                                    {p.stockQuantity} un
-                                  </span>
-                              </td>
-                              <td className="p-4 font-mono text-blue-600">R$ {p.price.toFixed(2)}</td>
-                              <td className="p-4 text-right gap-2 flex justify-end">
-                                  <button onClick={() => openModal(p)} className="text-blue-600 hover:bg-blue-50 p-2 rounded"><Edit size={18}/></button>
-                                  <button onClick={() => handleDelete(p.id)} className="text-red-600 hover:bg-red-50 p-2 rounded"><Trash2 size={18}/></button>
-                              </td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </div>
-
-          {isModalOpen && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-10">
-                  <form onSubmit={handleSave} className="bg-white p-8 rounded-xl w-full max-w-2xl space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200 my-auto">
-                      <h3 className="font-bold text-2xl text-gray-800 border-b pb-2">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h3>
-                      
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Nome</label>
-                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={name} onChange={e=>setName(e.target.value)} required />
-                        </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Descrição</label>
-                            <textarea className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none" value={desc} onChange={e=>setDesc(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Preço (R$)</label>
-                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} required />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Estoque</label>
-                            <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="number" value={stock} onChange={e=>setStock(e.target.value)} required />
-                        </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Imagem</label>
-                            <input type="file" onChange={e=>setImageFile(e.target.files[0])} className="text-sm w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-2">
-                        <h4 className="font-bold text-sm text-gray-700 mb-3 flex items-center gap-2"><Box size={16}/> Dados para Frete</h4>
-                        <div className="grid grid-cols-4 gap-4">
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Peso (kg)</label><input type="number" step="0.001" className="w-full border p-2 rounded text-sm" value={weight} onChange={e=>setWeight(e.target.value)} required /></div>
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Largura</label><input type="number" className="w-full border p-2 rounded text-sm" value={width} onChange={e=>setWidth(e.target.value)} required /></div>
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Altura</label><input type="number" className="w-full border p-2 rounded text-sm" value={height} onChange={e=>setHeight(e.target.value)} required /></div>
-                            <div><label className="block text-xs font-bold text-gray-600 mb-1">Comp.</label><input type="number" className="w-full border p-2 rounded text-sm" value={length} onChange={e=>setLength(e.target.value)} required /></div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end gap-3 pt-4">
-                          <Button type="button" variant="ghost" onClick={()=>setIsModalOpen(false)}>Cancelar</Button>
-                          <Button type="submit" isLoading={loading}>Salvar</Button>
-                      </div>
-                  </form>
-              </div>
-          )}
-      </div>
-  );
 };
 
 const CouponsTab = () => {

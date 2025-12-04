@@ -18,7 +18,17 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> GetStats()
     {
         var totalOrders = await _context.Orders.CountAsync();
-        var totalRevenue = await _context.Orders.Where(o => o.Status != "Cancelado").SumAsync(o => o.TotalAmount);
+
+        // Receita líquida (exclui cancelados e reembolsados)
+        var totalRevenue = await _context.Orders
+            .Where(o => o.Status != "Cancelado" && o.Status != "Reembolsado")
+            .SumAsync(o => o.TotalAmount);
+
+        // Total estornado/reembolsado
+        var totalRefunded = await _context.Orders
+            .Where(o => o.Status == "Reembolsado")
+            .SumAsync(o => o.TotalAmount);
+
         var pendingOrders = await _context.Orders.CountAsync(o => o.Status == "Pendente");
 
         var lowStockProducts = await _context.Products
@@ -30,6 +40,6 @@ public class DashboardController : ControllerBase
             .OrderByDescending(o => o.OrderDate).Take(5)
             .Select(o => new { o.Id, o.TotalAmount, o.Status, Date = o.OrderDate }).ToListAsync();
 
-        return Ok(new { totalOrders, totalRevenue, pendingOrders, lowStockProducts, recentOrders });
+        return Ok(new { totalOrders, totalRevenue, totalRefunded, pendingOrders, lowStockProducts, recentOrders });
     }
 }
