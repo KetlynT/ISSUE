@@ -167,6 +167,8 @@ builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
 
+builder.Services.AddTransient<JwtValidationMiddleware>();
+
 // Swagger Config
 builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica API", Version = "v1" });
@@ -251,6 +253,7 @@ app.UseStaticFiles();
 
 // Ordem Importante: Auth -> Authorization
 app.UseAuthentication();
+app.UseMiddleware<JwtValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

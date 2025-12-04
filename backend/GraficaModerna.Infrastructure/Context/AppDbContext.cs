@@ -1,39 +1,104 @@
 using GraficaModerna.Domain.Entities;
+using GraficaModerna.Domain.Interfaces;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace GraficaModerna.Infrastructure.Context;
 
 public class AppDbContext : IdentityDbContext<ApplicationUser>
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    public DbSet<Product> Products { get; set; }
-    public DbSet<Cart> Carts { get; set; }
-    public DbSet<CartItem> CartItems { get; set; }
-    public DbSet<Order> Orders { get; set; }
-    public DbSet<UserAddress> UserAddresses { get; set; }
-    public DbSet<Coupon> Coupons { get; set; }
-    public DbSet<SiteSetting> SiteSettings { get; set; }
-    public DbSet<ContentPage> ContentPages { get; set; }
-
-    // CORREÇÃO: Nova tabela
-    public DbSet<CouponUsage> CouponUsages { get; set; }
-
-    protected override void OnModelCreating(ModelBuilder builder)
+    public AppDbContext(DbContextOptions<AppDbContext> options)
+        : base(options)
     {
-        base.OnModelCreating(builder);
+    }
 
-        // CORREÇÃO: Precisão decimal para evitar erros financeiros no Postgres
-        builder.Entity<Product>().Property(p => p.Price).HasPrecision(18, 2);
-        builder.Entity<Order>().Property(p => p.TotalAmount).HasPrecision(18, 2);
-        builder.Entity<Order>().Property(p => p.SubTotal).HasPrecision(18, 2);
-        builder.Entity<Order>().Property(p => p.ShippingCost).HasPrecision(18, 2);
-        builder.Entity<Order>().Property(p => p.Discount).HasPrecision(18, 2);
+    // ?? EXEMPLOS – substitua pelos seus DbSets reais
+    public DbSet<Product> Products { get; set; }
+    public DbSet<Order> Orders { get; set; }
+    public DbSet<Cart> Carts { get; set; }
 
-        // CORREÇÃO: Configuração do RowVersion para concorrência
-        builder.Entity<Product>()
-            .Property(p => p.RowVersion)
-            .IsRowVersion();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // ------------------------------------------------------------
+        // 1. APLICAR TODAS AS CONFIGURAÇÕES DO ASSEMBLY
+        // ------------------------------------------------------------
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        // ------------------------------------------------------------
+        // 2. FILTRO GLOBAL DE SOFT DELETE
+        // ------------------------------------------------------------
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(ISoftDelete).IsAssignableFrom(entity.ClrType))
+            {
+                var parameter = Expression.Parameter(entity.ClrType, "e");
+                var isDeletedProperty = Expression.Property(parameter, nameof(ISoftDelete.IsDeleted));
+                var compareExpression = Expression.Equal(isDeletedProperty, Expression.Constant(false));
+                var lambda = Expression.Lambda(compareExpression, parameter);
+
+                entity.SetQueryFilter(lambda);
+            }
+        }
+
+        // ------------------------------------------------------------
+        // 3. ÍNDICES DE PERFORMANCE AUTOMÁTICOS
+        // ------------------------------------------------------------
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            // Chave primária sempre indexada ? ignora
+            foreach (var prop in entity.GetProperties())
+            {
+                if (prop.Name.EndsWith("Id")) // UserId, ProductId, etc
+                {
+                    entity.AddIndex(prop);
+                }
+
+                if (prop.ClrType == typeof(DateTime) && prop.Name.Contains("At"))
+                {
+                    entity.AddIndex(prop);
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 4. AUDITORIA AUTOMÁTICA
+    // ------------------------------------------------------------
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.Entity is IAuditable)
+            .ToList();
+
+        foreach (var entry in entries)
+        {
+            var auditable = (IAuditable)entry.Entity;
+
+            if (entry.State == EntityState.Added)
+            {
+                auditable.CreatedAt = DateTime.UtcNow;
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
+                auditable.UpdatedAt = DateTime.UtcNow;
+
+                // Evita mudar CreatedAt no update
+                entry.Property(nameof(IAuditable.CreatedAt)).IsModified = false;
+            }
+
+            if (entry.Entity is ISoftDelete softDel &&
+                entry.State == EntityState.Deleted)
+            {
+                // transforma Delete ? Update com soft delete
+                softDel.IsDeleted = true;
+                entry.State = EntityState.Modified;
+            }
+        }
+
+        return base.SaveChangesAsync(cancellationToken);
     }
 }

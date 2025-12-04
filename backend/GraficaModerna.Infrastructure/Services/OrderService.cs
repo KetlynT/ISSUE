@@ -33,7 +33,25 @@ public class OrderService : IOrderService
         _paymentService = paymentService;
     }
 
-    // REMOVIDO: parâmetro frontendShippingCost
+    // 🔐 CENTRALIZA A SEGURANÇA
+    private async Task<Order> GetUserOrderOrFail(Guid orderId, string userId)
+    {
+        var order = await _context.Orders
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
+        if (order == null)
+            throw new Exception("Pedido não encontrado.");
+
+        if (order.UserId != userId)
+            throw new UnauthorizedAccessException("Você não tem permissão para acessar este pedido.");
+
+        return order;
+    }
+
+    // ===========================
+    // CRIAÇÃO DO PEDIDO
+    // ===========================
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, string shippingMethod)
     {
         var cart = await _context.Carts
@@ -41,9 +59,10 @@ public class OrderService : IOrderService
             .ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(c => c.UserId == userId);
 
-        if (cart == null || !cart.Items.Any()) throw new Exception("Carrinho vazio.");
+        if (cart == null || !cart.Items.Any())
+            throw new Exception("Carrinho vazio.");
 
-        // 1. Recálculo OBRIGATÓRIO do Frete (Backend Source of Truth)
+        // 1. Recalcular frete no backend
         var shippingItems = cart.Items.Select(i => new ShippingItemDto
         {
             ProductId = i.ProductId,
@@ -58,19 +77,15 @@ public class OrderService : IOrderService
         var shippingResults = await Task.WhenAll(shippingTasks);
         var allOptions = shippingResults.SelectMany(x => x).ToList();
 
-        // Busca o método selecionado na lista OFICIAL calculada pelo backend
         var selectedOption = allOptions.FirstOrDefault(o =>
             o.Name.Trim().Equals(shippingMethod.Trim(), StringComparison.InvariantCultureIgnoreCase));
 
         if (selectedOption == null)
-        {
-            // Se não encontrou o método, rejeita o pedido. Não aceita valor arbitrário.
-            throw new Exception("O método de envio selecionado não está mais disponível ou é inválido para este carrinho/CEP. Por favor, atualize a página.");
-        }
+            throw new Exception("Método de envio inválido ou indisponível.");
 
         decimal verifiedShippingCost = selectedOption.Price;
 
-        // 2. Transação e Estoque
+        // 2. Transação + Estoque
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -85,6 +100,7 @@ public class OrderService : IOrderService
                 _context.Entry(item.Product).State = EntityState.Modified;
 
                 subTotal += item.Quantity * item.Product.Price;
+
                 orderItems.Add(new OrderItem
                 {
                     ProductId = item.ProductId,
@@ -96,37 +112,41 @@ public class OrderService : IOrderService
 
             // 3. Cupom
             decimal discount = 0;
-            if (!string.IsNullOrEmpty(couponCode))
+
+            if (!string.IsNullOrWhiteSpace(couponCode))
             {
                 var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Code == couponCode.ToUpper());
 
                 if (coupon != null && coupon.IsValid())
                 {
                     bool alreadyUsed = await _context.CouponUsages.AnyAsync(u => u.UserId == userId && u.CouponCode == coupon.Code);
-                    if (alreadyUsed) throw new Exception("Cupom já utilizado.");
+
+                    if (alreadyUsed)
+                        throw new Exception("Cupom já utilizado.");
 
                     discount = subTotal * (coupon.DiscountPercentage / 100m);
                 }
             }
 
-            // Cálculo final SEGURO
             decimal totalAmount = (subTotal - discount) + verifiedShippingCost;
 
-            var formattedAddress = $"{addressDto.Street}, {addressDto.Number} - {addressDto.Complement} - {addressDto.Neighborhood}, {addressDto.City}/{addressDto.State} (Ref: {addressDto.Reference}) - A/C: {addressDto.ReceiverName} - Tel: {addressDto.PhoneNumber}";
+            var formattedAddress =
+                $"{addressDto.Street}, {addressDto.Number} - {addressDto.Complement} - {addressDto.Neighborhood}, " +
+                $"{addressDto.City}/{addressDto.State} (Ref: {addressDto.Reference}) - A/C: {addressDto.ReceiverName} - Tel: {addressDto.PhoneNumber}";
 
             var order = new Order
             {
                 UserId = userId,
                 ShippingAddress = formattedAddress,
                 ShippingZipCode = addressDto.ZipCode,
-                ShippingCost = verifiedShippingCost, // Valor verificado
+                ShippingCost = verifiedShippingCost,
                 ShippingMethod = selectedOption.Name,
                 Status = "Pendente",
                 OrderDate = DateTime.UtcNow,
                 SubTotal = subTotal,
                 Discount = discount,
                 TotalAmount = totalAmount,
-                AppliedCoupon = !string.IsNullOrEmpty(couponCode) ? couponCode.ToUpper() : null,
+                AppliedCoupon = couponCode?.ToUpper(),
                 Items = orderItems,
                 CustomerIp = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString()
             };
@@ -134,7 +154,7 @@ public class OrderService : IOrderService
             _context.Orders.Add(order);
             await _context.SaveChangesAsync();
 
-            if (discount > 0 && !string.IsNullOrEmpty(couponCode))
+            if (discount > 0 && couponCode != null)
             {
                 _context.CouponUsages.Add(new CouponUsage
                 {
@@ -147,49 +167,78 @@ public class OrderService : IOrderService
 
             _context.CartItems.RemoveRange(cart.Items);
             await _context.SaveChangesAsync();
+
             await transaction.CommitAsync();
 
-            try
-            {
-                var user = await _userManager.FindByIdAsync(userId);
-                if (user != null) _ = _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{order.Id} foi recebido.");
-            }
-            catch { }
+            // Email não trava execução
+            _ = SendOrderReceivedEmailAsync(userId, order.Id);
 
             return MapToDto(order);
         }
-        catch (Exception)
+        catch
         {
             await transaction.RollbackAsync();
             throw;
         }
     }
 
-    // Métodos auxiliares mantidos (GetUserOrdersAsync, GetAllOrdersAsync, etc...)
-    // Apenas certifique-se de manter o resto da classe como estava no original, 
-    // pois foquei na correção do método CreateOrderFromCartAsync.
+    private async Task SendOrderReceivedEmailAsync(string userId, Guid orderId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+                await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{orderId} foi recebido.");
+        }
+        catch { }
+    }
 
+    // ===========================
+    // CONSULTAS
+    // ===========================
     public async Task<List<OrderDto>> GetUserOrdersAsync(string userId)
     {
-        var orders = await _context.Orders.Where(o => o.UserId == userId).Include(o => o.Items).OrderByDescending(o => o.OrderDate).ToListAsync();
+        var orders = await _context.Orders
+            .Where(o => o.UserId == userId)
+            .Include(o => o.Items)
+            .OrderByDescending(o => o.OrderDate)
+            .ToListAsync();
+
         return orders.Select(MapToDto).ToList();
     }
 
     public async Task<List<OrderDto>> GetAllOrdersAsync()
     {
-        var orders = await _context.Orders.Include(o => o.Items).OrderByDescending(o => o.OrderDate).ToListAsync();
+        var orders = await _context.Orders
+            .Include(o => o.Items)
+            .OrderByDescending(o => o.OrderDate)
+            .ToListAsync();
+
         return orders.Select(MapToDto).ToList();
     }
 
+    // ===========================
+    // ADMIN
+    // ===========================
     public async Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
+        var user = _httpContextAccessor.HttpContext?.User;
+
+        if (user == null || !user.IsInRole("Admin"))
+            throw new UnauthorizedAccessException("Apenas administradores podem alterar pedidos.");
+
         var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
         if (order == null) throw new Exception("Pedido não encontrado");
 
         if (dto.Status == "Aguardando Devolução")
         {
-            if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode)) order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
-            order.ReturnInstructions = !string.IsNullOrEmpty(dto.ReturnInstructions) ? dto.ReturnInstructions : "Instruções padrão...";
+            if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode))
+                order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
+
+            order.ReturnInstructions =
+                !string.IsNullOrEmpty(dto.ReturnInstructions)
+                    ? dto.ReturnInstructions
+                    : "Instruções padrão...";
         }
 
         if (dto.Status == "Reembolsado" || dto.Status == "Cancelado")
@@ -203,22 +252,31 @@ public class OrderService : IOrderService
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"Erro no Reembolso: {ex.Message}");
+                    throw new Exception($"Erro no reembolso Stripe: {ex.Message}");
                 }
             }
         }
 
-        if (dto.Status == "Entregue" && order.Status != "Entregue") order.DeliveryDate = DateTime.UtcNow;
+        if (dto.Status == "Entregue" && order.Status != "Entregue")
+            order.DeliveryDate = DateTime.UtcNow;
+
+        if (!string.IsNullOrEmpty(dto.TrackingCode))
+            order.TrackingCode = dto.TrackingCode;
+
         order.Status = dto.Status;
-        if (!string.IsNullOrEmpty(dto.TrackingCode)) order.TrackingCode = dto.TrackingCode;
 
         await _context.SaveChangesAsync();
     }
 
+    // ===========================
+    // WEBHOOK STRIPE
+    // ===========================
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId)
     {
         var order = await _context.Orders.FindAsync(orderId);
-        if (order != null && order.Status != "Pago")
+        if (order == null) return;
+
+        if (order.Status != "Pago")
         {
             order.Status = "Pago";
             order.StripePaymentIntentId = transactionId;
@@ -226,22 +284,31 @@ public class OrderService : IOrderService
         }
     }
 
+    // ===========================
+    // USUÁRIO: pagar
+    // ===========================
     public async Task PayOrderAsync(Guid orderId, string userId)
     {
-        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
-        if (order == null) throw new Exception("Pedido inválido.");
+        var order = await GetUserOrderOrFail(orderId, userId);
+
         order.Status = "Pago";
         await _context.SaveChangesAsync();
     }
 
+    // ===========================
+    // USUÁRIO: solicitar reembolso
+    // ===========================
     public async Task RequestRefundAsync(Guid orderId, string userId)
     {
-        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
-        if (order == null) throw new Exception("Pedido não encontrado.");
+        var order = await GetUserOrderOrFail(orderId, userId);
+
         order.Status = "Reembolso Solicitado";
         await _context.SaveChangesAsync();
     }
 
+    // ===========================
+    // MAP
+    // ===========================
     private static OrderDto MapToDto(Order order)
     {
         return new OrderDto(
@@ -257,7 +324,9 @@ public class OrderService : IOrderService
             order.ReverseLogisticsCode,
             order.ReturnInstructions,
             order.ShippingAddress,
-            order.Items.Select(i => new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)).ToList()
+            order.Items.Select(i =>
+                new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)
+            ).ToList()
         );
     }
 }
