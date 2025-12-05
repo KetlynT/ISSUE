@@ -21,6 +21,9 @@ using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using System.Threading.RateLimiting;
 using GraficaModerna.API.Data;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +33,14 @@ if (builder.Environment.IsDevelopment())
     DotNetEnv.Env.Load();
 }
 builder.Configuration.AddEnvironmentVariables();
+
+// Forwarded headers must be processed early when behind reverse proxy / load balancer
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Optionally clear to accept all proxies if you control infrastructure
+    // options.KnownNetworks.Clear(); options.KnownProxies.Clear();
+});
 
 // --- SEGURANÇA: Validação da Chave JWT ---
 // CORREÇÃO: Removemos o fallback inseguro. A chave DEVE vir do ambiente ou configuração segura.
@@ -94,7 +105,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// --- SEGURANÇA: JWT com Cookie e Blacklist ---
+// --- SEGURANÇA: JWT com Bearer Authorization header ---
 var key = Encoding.ASCII.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
@@ -120,16 +131,13 @@ builder.Services.AddAuthentication(options =>
 
     options.Events = new JwtBearerEvents
     {
-        // 1. Extrair Token do Cookie HttpOnly
+        // Do NOT read token from cookie. Require Authorization: Bearer <token>
         OnMessageReceived = context =>
         {
-            if (context.Request.Cookies.ContainsKey("jwt"))
-            {
-                context.Token = context.Request.Cookies["jwt"];
-            }
+            // If Authorization header present, let the handler use it.
+            // If no header, do not accept cookie-based token to avoid mixed modes.
             return Task.CompletedTask;
         },
-        // 2. Verificar Blacklist (Revogação)
         OnTokenValidated = async context =>
         {
             var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
@@ -202,6 +210,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Ensure forwarded headers are applied early in the pipeline so RemoteIpAddress is correct
+app.UseForwardedHeaders();
+
 // Headers de Segurança
 app.Use(async (context, next) =>
 {
@@ -223,37 +234,14 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+// Rate limiter relies on forwarded headers
 app.UseRateLimiter();
-
-// Seed de dados
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-
-        if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("RUN_SEED") == "true")
-            await DbSeeder.SeedAsync(context, userManager, roleManager, config);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Erro no Seed: {ex.Message}");
-    }
-}
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
 
 app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseMiddleware<JwtValidationMiddleware>();
+
 app.UseAuthorization();
 
 app.MapControllers();

@@ -1,5 +1,7 @@
 ﻿using GraficaModerna.Application.Interfaces;
 using Microsoft.Extensions.Caching.Distributed;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace GraficaModerna.Infrastructure.Services;
 
@@ -12,6 +14,17 @@ public class TokenBlacklistService : ITokenBlacklistService
         _cache = cache;
     }
 
+    private static string HashToken(string token)
+    {
+        using var sha = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = sha.ComputeHash(bytes);
+        // Use hex representation to keep key safe for cache
+        var sb = new StringBuilder(hash.Length * 2);
+        foreach (var b in hash) sb.Append(b.ToString("x2"));
+        return sb.ToString();
+    }
+
     public async Task BlacklistTokenAsync(string token, DateTime expiryDate)
     {
         var timeToLive = expiryDate - DateTime.UtcNow;
@@ -21,13 +34,15 @@ public class TokenBlacklistService : ITokenBlacklistService
         {
             AbsoluteExpirationRelativeToNow = timeToLive
         };
-        await _cache.SetStringAsync(token, "revoked", options);
+
+        var key = HashToken(token);
+        await _cache.SetStringAsync(key, "revoked", options);
     }
 
     public async Task<bool> IsTokenBlacklistedAsync(string token)
     {
-        // Se retornar valor, significa que a chave existe e o token está revogado
-        var value = await _cache.GetStringAsync(token);
+        var key = HashToken(token);
+        var value = await _cache.GetStringAsync(key);
         return value != null;
     }
 }

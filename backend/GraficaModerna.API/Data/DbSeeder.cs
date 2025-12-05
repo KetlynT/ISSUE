@@ -25,25 +25,52 @@ public static class DbSeeder
 
         // --- 1. USUÁRIOS ---
         var adminEmail = config["AdminSettings:Email"] ?? "admin@graficamoderna.com";
-        var defaultPassword = config["AdminSettings:DefaultPassword"] ?? "SenhaForte@123";
 
-        if (await userManager.FindByEmailAsync(adminEmail) == null)
+        // O password do admin deve sempre vir de variável de ambiente em produção
+        var defaultPasswordEnv = Environment.GetEnvironmentVariable("ADMIN_DEFAULT_PASSWORD");
+        var defaultPasswordConfig = config["AdminSettings:DefaultPassword"];
+
+        string? adminPassword = null;
+
+        if (!string.IsNullOrEmpty(defaultPasswordEnv))
         {
-            var adminUser = new ApplicationUser
-            {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FullName = "Administrador Sistema",
-                EmailConfirmed = true,
-                PhoneNumber = "11999999999"
-            };
+            adminPassword = defaultPasswordEnv;
+        }
+        else if (!string.IsNullOrEmpty(defaultPasswordConfig) && Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+        {
+            // Permitimos password em appsettings apenas em Development para facilitar testes locais
+            adminPassword = defaultPasswordConfig;
+        }
 
-            var result = await userManager.CreateAsync(adminUser, defaultPassword);
-
-            if (result.Succeeded)
+        if (string.IsNullOrEmpty(adminPassword))
+        {
+            // Não criar o admin automaticamente sem senha segura configurada
+            Console.WriteLine("AVISO: Admin não criado automaticamente. Configure ADMIN_DEFAULT_PASSWORD para criar o usuário admin.");
+        }
+        else
+        {
+            if (await userManager.FindByEmailAsync(adminEmail) == null)
             {
-                // CRUCIAL: Dar poder de Admin para este usuário
-                await userManager.AddToRoleAsync(adminUser, "Admin");
+                var adminUser = new ApplicationUser
+                {
+                    UserName = adminEmail,
+                    Email = adminEmail,
+                    FullName = "Administrador Sistema",
+                    EmailConfirmed = true,
+                    PhoneNumber = "11999999999"
+                };
+
+                var result = await userManager.CreateAsync(adminUser, adminPassword);
+
+                if (result.Succeeded)
+                {
+                    // CRUCIAL: Dar poder de Admin para este usuário
+                    await userManager.AddToRoleAsync(adminUser, "Admin");
+                }
+                else
+                {
+                    Console.WriteLine($"Falha ao criar admin: {string.Join(';', result.Errors.Select(e => e.Description))}");
+                }
             }
         }
 

@@ -1,21 +1,36 @@
 import api from './api';
 
+const TOKEN_KEY = 'access_token';
+
 const authService = {
-  // Login: O backend define o cookie. Não recebemos token no JSON.
+  // Login: backend should return { token, role, ... }
   login: async (credentials) => {
     const response = await api.post('/auth/login', credentials);
-    return response.data;
+    const data = response.data || {};
+    if (data.token) {
+      try { localStorage.setItem(TOKEN_KEY, data.token); } catch {}
+    }
+    return data;
   },
 
-  // Registro: O backend define o cookie automaticamente.
+  // Registro: backend returns token too
   register: async (data) => {
     const response = await api.post('/auth/register', data);
-    return response.data;
+    const result = response.data || {};
+    if (result.token) {
+      try { localStorage.setItem(TOKEN_KEY, result.token); } catch {}
+    }
+    return result;
   },
 
-  // Logout: Chama o backend para invalidar o cookie (Blacklist).
+  // Logout: notify backend to blacklist token and clear local storage
   logout: async () => {
-    await api.post('/auth/logout');
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // ignore backend error, still clear client state
+    }
+    try { localStorage.removeItem(TOKEN_KEY); } catch {}
   },
 
   // Perfil: Busca dados do utilizador logado.
@@ -30,14 +45,16 @@ const authService = {
     return response.data;
   },
 
-  // NOVO: Verifica se o cookie é válido ao carregar a página
+  // Verifica se o token é válido ao carregar a página
   checkAuth: async () => {
+    const token = (() => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } })();
+    if (!token) return { isAuthenticated: false, role: null };
+
     try {
-      // Endpoint leve criado no AuthController (Batch 2)
-      // Se der 401, cai no catch.
-      const response = await api.get('/auth/check-auth'); 
-      return response.data; // { isAuthenticated: true, role: "..." }
+      const response = await api.get('/auth/check-auth');
+      return response.data; // { isAuthenticated: true, role: '...' }
     } catch (error) {
+      try { localStorage.removeItem(TOKEN_KEY); } catch {}
       return { isAuthenticated: false, role: null };
     }
   }

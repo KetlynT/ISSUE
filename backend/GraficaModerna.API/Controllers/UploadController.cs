@@ -72,8 +72,10 @@ public class UploadController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Em produção, logue 'ex' adequadamente e retorne mensagem genérica se necessário
-            return BadRequest($"Erro ao processar o ficheiro: {ex.Message}");
+            // Em produção, logue 'ex' adequadamente e retorne mensagem genérica para evitar vazamento de detalhes
+            // _logger não está injetado aqui; se precisar, adicione ILogger via DI. Por ora, log simples no console.
+            Console.WriteLine($"Erro ao processar o ficheiro: {ex}");
+            return StatusCode(500, "Erro interno ao processar o ficheiro.");
         }
 
         var imageUrl = $"{Request.Scheme}://{Request.Host}/images/{fileName}";

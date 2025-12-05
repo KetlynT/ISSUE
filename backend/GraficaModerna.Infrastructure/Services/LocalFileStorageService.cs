@@ -81,9 +81,56 @@ public class LocalFileStorageService : IFileStorageService
         return $"{request.Scheme}://{request.Host}/{folderName}/{fileName}";
     }
 
-    public Task DeleteFileAsync(string fileUrl)
+    public async Task DeleteFileAsync(string fileUrl)
     {
-        // TODO: Implementar exclusão física segura (verificar se o path está dentro do root permitido)
-        return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(fileUrl)) return;
+
+        try
+        {
+            // Convert URL to local path
+            var uri = new Uri(fileUrl);
+            var relativePath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+
+            var webRoot = _env.WebRootPath;
+            var fullPath = Path.GetFullPath(Path.Combine(webRoot, relativePath));
+
+            // Ensure the file is within the web root
+            var webRootFull = Path.GetFullPath(webRoot);
+            if (!fullPath.StartsWith(webRootFull, StringComparison.OrdinalIgnoreCase))
+            {
+                // Log attempt or ignore
+                return;
+            }
+
+            if (File.Exists(fullPath))
+            {
+                // Overwrite the file with zeroes first to reduce data leakage risk (best-effort)
+                try
+                {
+                    using (var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Write, FileShare.None))
+                    {
+                        var zero = new byte[8192];
+                        long remaining = fs.Length;
+                        fs.Position = 0;
+                        while (remaining > 0)
+                        {
+                            var write = (int)Math.Min(zero.Length, remaining);
+                            await fs.WriteAsync(zero, 0, write);
+                            remaining -= write;
+                        }
+                    }
+                }
+                catch
+                {
+                    // If we cannot overwrite (locked), proceed to delete as fallback
+                }
+
+                File.Delete(fullPath);
+            }
+        }
+        catch
+        {
+            // Swallow exceptions to avoid exposing filesystem errors to callers
+        }
     }
 }

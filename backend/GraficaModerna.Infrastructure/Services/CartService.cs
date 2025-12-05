@@ -11,6 +11,7 @@ public class CartService : ICartService
 {
     private readonly IUnitOfWork _uow;
     private readonly AppDbContext _context;
+    private const int MaxConcurrencyRetries = 3;
 
     public CartService(IUnitOfWork uow, AppDbContext context)
     {
@@ -20,6 +21,9 @@ public class CartService : ICartService
 
     private async Task<Cart> GetOrCreateCart(string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("userId inválido.", nameof(userId));
+
         var cart = await _uow.Carts.GetByUserIdAsync(userId);
         if (cart == null)
         {
@@ -38,7 +42,7 @@ public class CartService : ICartService
     {
         var cart = await GetOrCreateCart(userId);
 
-        // Proteção contra produtos deletados
+        // Proteção contra produtos deletados/inativos
         var itemsDto = cart.Items
             .Where(i => i.Product != null && i.Product.IsActive)
             .Select(i => new CartItemDto(
@@ -71,112 +75,137 @@ public class CartService : ICartService
 
     public async Task AddItemAsync(string userId, AddToCartDto dto)
     {
-        // CORREÇÃO: Usar transação
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        if (dto == null) throw new ArgumentNullException(nameof(dto));
+        if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
+        if (dto.Quantity <= 0) throw new ArgumentOutOfRangeException(nameof(dto.Quantity), "Quantidade deve ser maior que zero.");
 
-        try
+        for (int attempt = 1; attempt <= MaxConcurrencyRetries; attempt++)
         {
-            // CORREÇÃO: Lock no produto para evitar race condition
-            var product = await _context.Products
-                .FromSqlRaw("SELECT * FROM \"Products\" WHERE \"Id\" = {0} FOR UPDATE", dto.ProductId)
-                .FirstOrDefaultAsync();
-
-            if (product == null || !product.IsActive)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                throw new Exception("Produto indisponível ou removido.");
-            }
+                // Consulta via LINQ (sem SQL cru) para evitar injeção e manter portabilidade
+                var product = await _context.Products
+                    .Where(p => p.Id == dto.ProductId && p.IsActive)
+                    .SingleOrDefaultAsync();
 
-            if (product.StockQuantity < dto.Quantity)
-            {
-                throw new Exception($"Estoque insuficiente. Disponível: {product.StockQuantity} unidades.");
-            }
-
-            var cart = await GetOrCreateCart(userId);
-            var existing = cart.Items.FirstOrDefault(i => i.ProductId == dto.ProductId);
-
-            if (existing != null)
-            {
-                int newTotal = existing.Quantity + dto.Quantity;
-
-                if (product.StockQuantity < newTotal)
+                if (product == null)
                 {
-                    throw new Exception($"Não é possível adicionar mais itens. Estoque disponível: {product.StockQuantity}");
+                    throw new InvalidOperationException("Produto indisponível ou removido.");
                 }
 
-                existing.Quantity = newTotal;
-            }
-            else
-            {
-                cart.Items.Add(new CartItem
+                if (product.StockQuantity < dto.Quantity)
                 {
-                    CartId = cart.Id,
-                    ProductId = dto.ProductId,
-                    Quantity = dto.Quantity
-                });
-            }
+                    throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
+                }
 
-            cart.LastUpdated = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
+                var cart = await GetOrCreateCart(userId);
+                var existing = cart.Items.FirstOrDefault(i => i.ProductId == dto.ProductId);
+
+                if (existing != null)
+                {
+                    int newTotal = existing.Quantity + dto.Quantity;
+                    if (product.StockQuantity < newTotal)
+                    {
+                        throw new InvalidOperationException("Não é possível adicionar mais itens: estoque insuficiente.");
+                    }
+                    existing.Quantity = newTotal;
+                }
+                else
+                {
+                    cart.Items.Add(new CartItem
+                    {
+                        CartId = cart.Id,
+                        ProductId = dto.ProductId,
+                        Quantity = dto.Quantity
+                    });
+                }
+
+                cart.LastUpdated = DateTime.UtcNow;
+
+                // Persistir usando UnitOfWork para manter consistência
+                await _uow.CommitAsync();
+
+                await transaction.CommitAsync();
+                return;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync();
+                if (attempt == MaxConcurrencyRetries)
+                    throw;
+                // retry
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 
     public async Task UpdateItemQuantityAsync(string userId, Guid cartItemId, int quantity)
     {
+        if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
         if (quantity <= 0)
         {
             await RemoveItemAsync(userId, cartItemId);
             return;
         }
 
-        // CORREÇÃO: Usar transação
-        using var transaction = await _context.Database.BeginTransactionAsync();
-
-        try
+        for (int attempt = 1; attempt <= MaxConcurrencyRetries; attempt++)
         {
-            var cart = await GetOrCreateCart(userId);
-            var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId);
-
-            if (item == null)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                throw new Exception("Item não encontrado no carrinho.");
+                var cart = await GetOrCreateCart(userId);
+                var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId);
+
+                if (item == null)
+                {
+                    throw new InvalidOperationException("Item não encontrado no carrinho.");
+                }
+
+                var product = await _context.Products
+                    .Where(p => p.Id == item.ProductId && p.IsActive)
+                    .SingleOrDefaultAsync();
+
+                if (product == null)
+                {
+                    throw new InvalidOperationException("Produto indisponível.");
+                }
+
+                if (product.StockQuantity < quantity)
+                {
+                    throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
+                }
+
+                item.Quantity = quantity;
+                cart.LastUpdated = DateTime.UtcNow;
+
+                await _uow.CommitAsync();
+                await transaction.CommitAsync();
+                return;
             }
-
-            // CORREÇÃO: Lock no produto
-            var product = await _context.Products
-                .FromSqlRaw("SELECT * FROM \"Products\" WHERE \"Id\" = {0} FOR UPDATE", item.ProductId)
-                .FirstOrDefaultAsync();
-
-            if (product == null || !product.IsActive)
+            catch (DbUpdateConcurrencyException)
             {
-                throw new Exception("Produto indisponível.");
+                await transaction.RollbackAsync();
+                if (attempt == MaxConcurrencyRetries)
+                    throw;
+                // retry
             }
-
-            if (product.StockQuantity < quantity)
+            catch
             {
-                throw new Exception($"Estoque insuficiente. Disponível: {product.StockQuantity}");
+                await transaction.RollbackAsync();
+                throw;
             }
-
-            item.Quantity = quantity;
-            cart.LastUpdated = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
         }
     }
 
     public async Task RemoveItemAsync(string userId, Guid itemId)
     {
+        if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
+
         var cart = await GetOrCreateCart(userId);
         var item = cart.Items.FirstOrDefault(i => i.Id == itemId);
 
@@ -189,6 +218,8 @@ public class CartService : ICartService
 
     public async Task ClearCartAsync(string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
+
         var cart = await _uow.Carts.GetByUserIdAsync(userId);
         if (cart != null)
         {

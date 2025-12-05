@@ -92,10 +92,10 @@ public class PaymentsController : ControllerBase
                 "Erro ao criar sessão de pagamento. Pedido: {OrderId}, Usuário: {UserId}",
                 orderId, userId);
 
+            // Retorna mensagem genérica para evitar exposição de detalhes internos
             return StatusCode(500, new
             {
-                message = "Erro ao processar pagamento. Tente novamente em alguns instantes.",
-                error = ex.Message
+                message = "Erro ao processar pagamento. Tente novamente em alguns instantes."
             });
         }
     }
