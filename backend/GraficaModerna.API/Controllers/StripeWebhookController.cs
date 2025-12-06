@@ -8,7 +8,7 @@ namespace GraficaModerna.API.Controllers;
 
 [Route("api/webhook")]
 [ApiController]
-[AllowAnonymous] // O Webhook do Stripe não envia JWT, ele usa assinatura (Stripe-Signature)
+[AllowAnonymous]
 public class StripeWebhookController : ControllerBase
 {
     private readonly IConfiguration _configuration;
@@ -29,8 +29,6 @@ public class StripeWebhookController : ControllerBase
     public async Task<IActionResult> HandleStripeEvent()
     {
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
-
-        // SEGURANÇA: Chave crítica. Em produção, DEVE vir de Env Var.
         var endpointSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
                              ?? _configuration["Stripe:WebhookSecret"];
 
@@ -43,14 +41,7 @@ public class StripeWebhookController : ControllerBase
         try
         {
             var signature = Request.Headers["Stripe-Signature"];
-
-            // Valida a assinatura criptográfica do Stripe
-            var stripeEvent = EventUtility.ConstructEvent(
-                json,
-                signature,
-                endpointSecret,
-                throwOnApiVersionMismatch: false // Pode ajustar para true se tiver certeza da versão da API
-            );
+            var stripeEvent = EventUtility.ConstructEvent(json, signature, endpointSecret, throwOnApiVersionMismatch: false);
 
             if (stripeEvent.Type == Events.CheckoutSessionCompleted)
             {
@@ -61,10 +52,14 @@ public class StripeWebhookController : ControllerBase
                     if (Guid.TryParse(orderIdString, out Guid orderId))
                     {
                         var transactionId = session.PaymentIntentId;
-                        _logger.LogInformation($"[Webhook] Processando pagamento para Pedido {orderId}. Transação: {transactionId}");
 
-                        // O OrderService já cuida da idempotência (verificando se já está 'Pago')
-                        await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId);
+                        // CORREÇÃO: Capturamos o valor pago (em centavos) para validação
+                        // Se for nulo, assumimos 0 para garantir que falhe na validação
+                        long amountPaid = session.AmountTotal ?? 0;
+
+                        _logger.LogInformation($"[Webhook] Processando pagamento para Pedido {orderId}. Transação: {transactionId}. Valor: {amountPaid}");
+
+                        await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
                     }
                     else
                     {
@@ -74,7 +69,6 @@ public class StripeWebhookController : ControllerBase
             }
             else if (stripeEvent.Type == Events.PaymentIntentPaymentFailed)
             {
-                // Opcional: Implementar lógica de falha (enviar email para cliente tentar novamente)
                 _logger.LogWarning($"[Webhook] Pagamento falhou: {stripeEvent.Id}");
             }
 

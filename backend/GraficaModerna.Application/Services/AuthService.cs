@@ -16,11 +16,16 @@ public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly IPasswordHasher<ApplicationUser> _passwordHasher; //
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        IConfiguration configuration,
+        IPasswordHasher<ApplicationUser> passwordHasher) // Injeção do Hasher
     {
         _userManager = userManager;
         _configuration = configuration;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
@@ -73,15 +78,30 @@ public class AuthService : IAuthService
         string? accessToken = tokenModel.AccessToken;
         string? refreshToken = tokenModel.RefreshToken;
 
+        // CORREÇÃO: Validar se o token recebido é nulo ou vazio logo no início.
+        // Isso satisfaz o compilador e evita passar null para o VerifyHashedPassword.
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            throw new Exception("Refresh token inválido");
+        }
+
         var principal = GetPrincipalFromExpiredToken(accessToken);
         if (principal == null) throw new Exception("Token de acesso ou refresh token inválido");
 
-        string username = principal.Identity!.Name!; // Mapeado do ClaimTypes.Name (no Identity é o UserName/Email)
+        string username = principal.Identity!.Name!;
 
-        // Como o Name no Identity pode ser UserName, buscamos pelo UserName
         var user = await _userManager.FindByNameAsync(username);
 
-        if (user == null || user.RefreshToken != refreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        // Verifica se o usuário existe, se o hash no banco (user.RefreshToken) existe e se não expirou.
+        if (user == null || user.RefreshToken == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        {
+            throw new Exception("Refresh token inválido ou expirado.");
+        }
+
+        // Agora o 'refreshToken' (3º parâmetro) é seguro porque validamos string.IsNullOrEmpty acima.
+        var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.RefreshToken, refreshToken);
+
+        if (verificationResult != PasswordVerificationResult.Success)
         {
             throw new Exception("Refresh token inválido ou expirado.");
         }
@@ -120,8 +140,8 @@ public class AuthService : IAuthService
         // 2. Gera Refresh Token (Longa Duração: 7 dias)
         var refreshToken = GenerateRefreshToken();
 
-        // 3. Salva Refresh Token no Banco
-        user.RefreshToken = refreshToken;
+        // 3. Salva Refresh Token no Banco (CORREÇÃO: Salva o HASH, não o texto plano)
+        user.RefreshToken = _passwordHasher.HashPassword(user, refreshToken); //
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
         await _userManager.UpdateAsync(user);
 
@@ -129,6 +149,7 @@ public class AuthService : IAuthService
         var roles = await _userManager.GetRolesAsync(user);
         var primaryRole = roles.Contains(Roles.Admin) ? Roles.Admin : (roles.FirstOrDefault() ?? Roles.User);
 
+        // Retorna o refreshToken original para o usuário (ele precisa do valor para enviar depois)
         return new AuthResponseDto(new JwtSecurityTokenHandler().WriteToken(accessToken), refreshToken, user.Email!, primaryRole);
     }
 

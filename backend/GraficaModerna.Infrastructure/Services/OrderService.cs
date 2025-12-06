@@ -324,20 +324,54 @@ public class OrderService : IOrderService
         await _context.SaveChangesAsync();
     }
 
-    public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId)
+    // =================================================================
+    //  CORREÇÃO SEGURANÇA: Validação de Valor e Idempotência
+    // =================================================================
+    public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId, long amountPaidInCents)
     {
+        // 1. Idempotência (Proteção contra Replay Attack)
+        // Verifica se o ID da transação já foi usado em algum pedido no banco
+        bool isAlreadyProcessed = await _context.Orders
+            .AnyAsync(o => o.StripePaymentIntentId == transactionId);
+
+        if (isAlreadyProcessed)
+        {
+            // Se já foi processado, retornamos sucesso sem fazer nada para evitar duplicação
+            return;
+        }
+
         var order = await _context.Orders
             .Include(o => o.History)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
         if (order == null) return;
 
+        // 2. SEGURANÇA: Validação de Integridade de Valor (Parameter Tampering)
+        // Convertemos o TotalAmount do pedido (Decimal) para centavos (Long) para comparar com o Stripe
+        long expectedAmountInCents = (long)(order.TotalAmount * 100);
+
+        // Tolerância zero para diferença de valores (protege contra quem altera o valor no front)
+        if (amountPaidInCents != expectedAmountInCents)
+        {
+            // Registra a tentativa de fraude no histórico do pedido para auditoria
+            AddAuditLog(order, "Fraude Suspeita",
+                $"Divergência de valor. Esperado: {expectedAmountInCents}, Recebido: {amountPaidInCents}. Transação: {transactionId}",
+                "SYSTEM-SECURITY");
+
+            await _context.SaveChangesAsync();
+
+            // Lança exceção (Critical) que será logada pelo Controller/Middleware
+            throw new Exception($"FATAL: Tentativa de manipulação de pagamento. Pedido {orderId}. Esperado {expectedAmountInCents}, Recebido {amountPaidInCents}");
+        }
+
+        // Se passou nas validações e o pedido ainda não está pago
         if (order.Status != "Pago")
         {
             order.StripePaymentIntentId = transactionId;
 
-            // Webhooks são chamados pelo sistema, usamos uma constante para identificar
-            AddAuditLog(order, "Pago", $"Pagamento confirmado via Webhook. ID: {transactionId}", "STRIPE-WEBHOOK");
+            AddAuditLog(order, "Pago",
+                $"Pagamento confirmado via Webhook. ID: {transactionId}. Valor validado: {amountPaidInCents / 100.0:C}",
+                "STRIPE-WEBHOOK");
 
             await _context.SaveChangesAsync();
         }
