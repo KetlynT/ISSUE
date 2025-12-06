@@ -24,17 +24,21 @@ public class ExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Um erro não tratado ocorreu.");
+            // SEGURANÇA: O TraceId permite correlacionar o erro no log sem expor dados ao usuário
+            var traceId = context.TraceIdentifier;
+
+            _logger.LogError(ex, "Um erro não tratado ocorreu. TraceId: {TraceId}", traceId);
 
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
-            // CORRIGIDO: Lógica simplificada para evitar erro de tipo anônimo
             var response = new
             {
                 StatusCode = context.Response.StatusCode,
-                Message = _env.IsDevelopment() ? ex.Message : "Erro interno no servidor. Contate o suporte.",
-                StackTrace = _env.IsDevelopment() ? ex.StackTrace : string.Empty
+                // Em Produção, ocultamos a mensagem original que pode conter dados sensíveis (connection strings, paths, etc)
+                Message = _env.IsDevelopment() ? ex.Message : "Erro interno no servidor. Contate o suporte informando o código de rastreio.",
+                StackTrace = _env.IsDevelopment() ? ex.StackTrace : string.Empty,
+                TraceId = traceId
             };
 
             var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };

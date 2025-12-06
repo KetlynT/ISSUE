@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Logout()
     {
-        // Prefer token from Authorization header: "Bearer <token>"
+        // Apenas Header é aceito
         string? token = null;
 
         if (Request.Headers.TryGetValue("Authorization", out var authHeader))
@@ -62,31 +62,19 @@ public class AuthController : ControllerBase
             }
         }
 
-        // Fallback: try to read cookie (in case some clients still use it)
-        if (string.IsNullOrEmpty(token) && Request.Cookies.TryGetValue("jwt", out var cookieToken))
-        {
-            token = cookieToken;
-        }
-
         if (!string.IsNullOrEmpty(token))
         {
             try
             {
                 var handler = new JwtSecurityTokenHandler();
                 var jwtToken = handler.ReadJwtToken(token);
+                // Blacklist é a forma correta de invalidar JWT antes da expiração
                 await _blacklistService.BlacklistTokenAsync(token, jwtToken.ValidTo);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning("Erro ao processar blacklist no logout: {Message}", ex.Message);
-                // continue and return success to client
             }
-        }
-
-        // If cookie existed, remove it for compatibility
-        if (Request.Cookies.ContainsKey("jwt"))
-        {
-            Response.Cookies.Delete("jwt");
         }
 
         return Ok(new { message = "Deslogado com sucesso" });

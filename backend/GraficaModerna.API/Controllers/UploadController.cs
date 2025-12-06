@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[EnableRateLimiting("UploadPolicy")]
 public class UploadController : ControllerBase
 {
     // Limite de segurança: 5MB

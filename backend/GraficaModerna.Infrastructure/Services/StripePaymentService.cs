@@ -1,6 +1,7 @@
 ﻿using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Domain.Entities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Stripe;
 using Stripe.Checkout;
 
@@ -9,17 +10,20 @@ namespace GraficaModerna.Infrastructure.Services;
 public class StripePaymentService : IPaymentService
 {
     private readonly IConfiguration _configuration;
+    private readonly ILogger<StripePaymentService> _logger;
 
-    public StripePaymentService(IConfiguration configuration)
+    public StripePaymentService(IConfiguration configuration, ILogger<StripePaymentService> logger)
     {
         _configuration = configuration;
+        _logger = logger;
 
-        // SEGURANÇA: Prioriza Variável de Ambiente em Produção
+        // SEGURANÇA: Prioriza Variável de Ambiente
         var apiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? _configuration["Stripe:SecretKey"];
 
         if (string.IsNullOrEmpty(apiKey))
         {
-            throw new Exception("FATAL: Stripe Secret Key não configurada (STRIPE_SECRET_KEY).");
+            _logger.LogCritical("STRIPE_SECRET_KEY não encontrada.");
+            throw new Exception("Erro de configuração no servidor de pagamentos.");
         }
 
         StripeConfiguration.ApiKey = apiKey;
@@ -27,107 +31,136 @@ public class StripePaymentService : IPaymentService
 
     public async Task<string> CreateCheckoutSessionAsync(Order order)
     {
-        // Flexibilidade para Deploy (Docker/Azure/AWS usam Env Vars)
-        var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
-                          ?? _configuration["FrontendUrl"]
-                          ?? "http://localhost:5173";
-
-        // Remove barras finais se existirem para evitar "//"
-        frontendUrl = frontendUrl.TrimEnd('/');
-
-        var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
-        var cancelUrl = $"{frontendUrl}/meus-pedidos";
-
-        var options = new SessionCreateOptions
+        try
         {
-            Mode = "payment",
-            SuccessUrl = successUrl,
-            CancelUrl = cancelUrl,
-            Metadata = new Dictionary<string, string>
-            {
-                { "order_id", order.Id.ToString() },
-                { "user_email", order.UserId },
-                { "expected_amount", order.TotalAmount.ToString("F2") } // Útil para auditoria
-            },
-            LineItems = new List<SessionLineItemOptions>()
-        };
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL")
+                              ?? _configuration["FrontendUrl"]
+                              ?? "http://localhost:5173";
 
-        foreach (var item in order.Items)
-        {
-            var unitAmount = (long)Math.Round(item.UnitPrice * 100);
+            frontendUrl = frontendUrl.TrimEnd('/');
 
-            options.LineItems.Add(new SessionLineItemOptions
+            var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
+            var cancelUrl = $"{frontendUrl}/meus-pedidos";
+
+            var options = new SessionCreateOptions
             {
-                PriceData = new SessionLineItemPriceDataOptions
+                Mode = "payment",
+                SuccessUrl = successUrl,
+                CancelUrl = cancelUrl,
+                Metadata = new Dictionary<string, string>
                 {
-                    UnitAmount = unitAmount,
-                    Currency = "brl",
-                    ProductData = new SessionLineItemPriceDataProductDataOptions
-                    {
-                        Name = item.ProductName,
-                    },
+                    { "order_id", order.Id.ToString() },
+                    { "user_email", order.UserId },
+                    { "expected_amount", order.TotalAmount.ToString("F2") }
                 },
-                Quantity = item.Quantity,
-            });
-        }
-
-        if (order.ShippingCost > 0)
-        {
-            var shippingAmount = (long)Math.Round(order.ShippingCost * 100);
-            options.LineItems.Add(new SessionLineItemOptions
-            {
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    UnitAmount = shippingAmount,
-                    Currency = "brl",
-                    ProductData = new SessionLineItemPriceDataProductDataOptions
-                    {
-                        Name = $"Frete - {order.ShippingMethod}",
-                    },
-                },
-                Quantity = 1,
-            });
-        }
-
-        // Lógica de Cupom (One-time usage)
-        if (order.Discount > 0)
-        {
-            // Cria um cupom dinâmico de uso único no Stripe
-            var couponOptions = new CouponCreateOptions
-            {
-                AmountOff = (long)Math.Round(order.Discount * 100),
-                Currency = "brl",
-                Duration = "once",
-                Name = order.AppliedCoupon ?? "Desconto Promocional"
+                LineItems = new List<SessionLineItemOptions>()
             };
 
-            var stripeCouponService = new Stripe.CouponService();
-            var stripeCoupon = await stripeCouponService.CreateAsync(couponOptions);
-
-            options.Discounts = new List<SessionDiscountOptions>
+            foreach (var item in order.Items)
             {
-                new SessionDiscountOptions { Coupon = stripeCoupon.Id }
-            };
+                var unitAmount = (long)Math.Round(item.UnitPrice * 100);
+
+                options.LineItems.Add(new SessionLineItemOptions
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        UnitAmount = unitAmount,
+                        Currency = "brl",
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = item.ProductName,
+                        },
+                    },
+                    Quantity = item.Quantity,
+                });
+            }
+
+            if (order.ShippingCost > 0)
+            {
+                var shippingAmount = (long)Math.Round(order.ShippingCost * 100);
+                options.LineItems.Add(new SessionLineItemOptions
+                {
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        UnitAmount = shippingAmount,
+                        Currency = "brl",
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = $"Frete - {order.ShippingMethod}",
+                        },
+                    },
+                    Quantity = 1,
+                });
+            }
+
+            if (order.Discount > 0)
+            {
+                var couponOptions = new CouponCreateOptions
+                {
+                    AmountOff = (long)Math.Round(order.Discount * 100),
+                    Currency = "brl",
+                    Duration = "once",
+                    Name = order.AppliedCoupon ?? "Desconto Promocional"
+                };
+
+                var stripeCouponService = new Stripe.CouponService();
+                var stripeCoupon = await stripeCouponService.CreateAsync(couponOptions);
+
+                options.Discounts = new List<SessionDiscountOptions>
+                {
+                    new SessionDiscountOptions { Coupon = stripeCoupon.Id }
+                };
+            }
+
+            var service = new SessionService();
+            Session session = await service.CreateAsync(options);
+
+            return session.Url;
         }
+        catch (StripeException stripeEx)
+        {
+            // CORREÇÃO: Acessamos o RequestId via StripeResponse com verificação de nulo
+            var requestId = stripeEx.StripeResponse?.RequestId ?? "N/A";
 
-        var service = new SessionService();
-        Session session = await service.CreateAsync(options);
+            _logger.LogError(stripeEx, "Erro Stripe ao criar sessão. OrderId: {OrderId}, StripeCode: {StripeCode}, RequestId: {RequestId}",
+                order.Id, stripeEx.StripeError?.Code, requestId);
 
-        return session.Url;
+            throw new Exception("Falha na comunicação com o provedor de pagamentos. Tente novamente.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro genérico ao criar sessão de pagamento. OrderId: {OrderId}", order.Id);
+            throw new Exception("Erro ao processar o pagamento.");
+        }
     }
 
     public async Task RefundPaymentAsync(string paymentIntentId)
     {
         if (string.IsNullOrEmpty(paymentIntentId))
-            throw new ArgumentException("ID da transação inválido para reembolso.");
+            throw new ArgumentException("ID da transação inválido.");
 
-        var refundService = new RefundService();
-        var options = new RefundCreateOptions
+        try
         {
-            PaymentIntent = paymentIntentId,
-            Reason = RefundReasons.RequestedByCustomer
-        };
+            var refundService = new RefundService();
+            var options = new RefundCreateOptions
+            {
+                PaymentIntent = paymentIntentId,
+                Reason = RefundReasons.RequestedByCustomer
+            };
 
-        await refundService.CreateAsync(options);
+            await refundService.CreateAsync(options);
+        }
+        catch (StripeException stripeEx)
+        {
+            _logger.LogError(stripeEx, "Erro Stripe ao processar reembolso. PaymentIntent: {PaymentIntent}, Code: {Code}",
+                paymentIntentId, stripeEx.StripeError?.Code);
+
+            throw new Exception("Não foi possível processar o reembolso automático no provedor de pagamentos.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro genérico ao processar reembolso. PaymentIntent: {PaymentIntent}", paymentIntentId);
+            throw new Exception("Erro ao processar reembolso.");
+        }
     }
 }

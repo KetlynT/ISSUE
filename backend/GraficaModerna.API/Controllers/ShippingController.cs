@@ -1,15 +1,19 @@
 ﻿using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Linq; // Necessário para o .Where(char.IsDigit)
 
 namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[EnableRateLimiting("ShippingPolicy")]
 public class ShippingController : ControllerBase
 {
     private readonly IEnumerable<IShippingService> _shippingServices;
     private readonly IProductService _productService;
+    private const int MaxItemsPerCalculation = 50;
 
     public ShippingController(IEnumerable<IShippingService> shippingServices, IProductService productService)
     {
@@ -20,19 +24,33 @@ public class ShippingController : ControllerBase
     [HttpPost("calculate")]
     public async Task<ActionResult<List<ShippingOptionDto>>> Calculate([FromBody] CalculateShippingRequest request)
     {
-        if (string.IsNullOrEmpty(request.DestinationCep) || request.DestinationCep.Length < 8)
+        // VALIDAÇÃO: Input nulo ou vazio
+        if (request == null || string.IsNullOrWhiteSpace(request.DestinationCep))
             return BadRequest("CEP de destino inválido.");
+
+        // CORREÇÃO: Sanitização e Validação Estrita de CEP
+        // Remove qualquer caractere que não seja número (hífens, espaços, letras)
+        var cleanCep = new string(request.DestinationCep.Where(char.IsDigit).ToArray());
+
+        if (cleanCep.Length != 8)
+            return BadRequest("CEP inválido. Certifique-se de informar os 8 dígitos numéricos.");
 
         if (request.Items == null || !request.Items.Any())
             return BadRequest("Nenhum item informado para cálculo.");
 
-        // --- CORREÇÃO DE SEGURANÇA (PARAMETER TAMPERING) ---
-        // Recriamos a lista de itens buscando os dados REAIS no banco de dados.
-        // Isso impede que um usuário malicioso envie um peso de 0.001kg para pagar menos frete.
+        if (request.Items.Count > MaxItemsPerCalculation)
+            return BadRequest($"O cálculo é limitado a {MaxItemsPerCalculation} itens distintos por vez.");
+
         var validatedItems = new List<ShippingItemDto>();
 
         foreach (var item in request.Items)
         {
+            if (item.Quantity <= 0)
+                return BadRequest($"Item {item.ProductId} possui quantidade inválida ({item.Quantity}).");
+
+            if (item.Quantity > 1000)
+                return BadRequest($"Quantidade excessiva para o item {item.ProductId}. Entre em contato para cotação de atacado.");
+
             if (item.ProductId != Guid.Empty)
             {
                 var product = await _productService.GetByIdAsync(item.ProductId);
@@ -41,7 +59,6 @@ public class ShippingController : ControllerBase
                     validatedItems.Add(new ShippingItemDto
                     {
                         ProductId = product.Id,
-                        // Usamos APENAS os dados do banco de dados
                         Weight = product.Weight,
                         Width = product.Width,
                         Height = product.Height,
@@ -57,8 +74,8 @@ public class ShippingController : ControllerBase
 
         var allOptions = new List<ShippingOptionDto>();
 
-        // Executa o cálculo com os itens validados
-        var tasks = _shippingServices.Select(service => service.CalculateAsync(request.DestinationCep, validatedItems));
+        // CORREÇÃO: Usamos 'cleanCep' sanitizado ao invés do input bruto do usuário
+        var tasks = _shippingServices.Select(service => service.CalculateAsync(cleanCep, validatedItems));
 
         try
         {
@@ -73,6 +90,7 @@ public class ShippingController : ControllerBase
         }
         catch (Exception ex)
         {
+            // Logar 'ex' internamente se possível
             return StatusCode(500, $"Erro ao calcular frete: {ex.Message}");
         }
     }
@@ -80,6 +98,15 @@ public class ShippingController : ControllerBase
     [HttpGet("product/{productId}/{cep}")]
     public async Task<ActionResult<List<ShippingOptionDto>>> CalculateForProduct(Guid productId, string cep)
     {
+        if (string.IsNullOrWhiteSpace(cep))
+            return BadRequest("CEP inválido.");
+
+        // CORREÇÃO: Sanitização também no GET
+        var cleanCep = new string(cep.Where(char.IsDigit).ToArray());
+
+        if (cleanCep.Length != 8)
+            return BadRequest("CEP inválido. Informe apenas os 8 dígitos.");
+
         var product = await _productService.GetByIdAsync(productId);
         if (product == null) return NotFound("Produto não encontrado.");
 
@@ -94,7 +121,9 @@ public class ShippingController : ControllerBase
         };
 
         var allOptions = new List<ShippingOptionDto>();
-        var tasks = _shippingServices.Select(s => s.CalculateAsync(cep, new List<ShippingItemDto> { item }));
+
+        // CORREÇÃO: Usar cleanCep
+        var tasks = _shippingServices.Select(s => s.CalculateAsync(cleanCep, new List<ShippingItemDto> { item }));
 
         try
         {

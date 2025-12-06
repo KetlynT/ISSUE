@@ -13,6 +13,9 @@ public class CartService : ICartService
     private readonly AppDbContext _context;
     private const int MaxConcurrencyRetries = 3;
 
+    // REGRA DE SEGURANÇA: Limite máximo por item para evitar erros de cálculo ou abuso
+    private const int MaxQuantityPerItem = 5000;
+
     public CartService(IUnitOfWork uow, AppDbContext context)
     {
         _uow = uow;
@@ -77,39 +80,45 @@ public class CartService : ICartService
     {
         if (dto == null) throw new ArgumentNullException(nameof(dto));
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
+
+        // VALIDAÇÃO: Quantidade positiva e dentro do limite
         if (dto.Quantity <= 0) throw new ArgumentOutOfRangeException(nameof(dto.Quantity), "Quantidade deve ser maior que zero.");
+        if (dto.Quantity > MaxQuantityPerItem) throw new ArgumentOutOfRangeException(nameof(dto.Quantity), $"Quantidade excede o limite permitido de {MaxQuantityPerItem}.");
 
         for (int attempt = 1; attempt <= MaxConcurrencyRetries; attempt++)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Consulta via LINQ (sem SQL cru) para evitar injeção e manter portabilidade
                 var product = await _context.Products
                     .Where(p => p.Id == dto.ProductId && p.IsActive)
                     .SingleOrDefaultAsync();
 
-                if (product == null)
-                {
-                    throw new InvalidOperationException("Produto indisponível ou removido.");
-                }
-
-                if (product.StockQuantity < dto.Quantity)
-                {
-                    throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
-                }
+                if (product == null) throw new InvalidOperationException("Produto indisponível ou removido.");
+                if (product.StockQuantity < dto.Quantity) throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
 
                 var cart = await GetOrCreateCart(userId);
                 var existing = cart.Items.FirstOrDefault(i => i.ProductId == dto.ProductId);
 
                 if (existing != null)
                 {
-                    int newTotal = existing.Quantity + dto.Quantity;
-                    if (product.StockQuantity < newTotal)
+                    // SEGURANÇA: Proteção contra Integer Overflow com 'checked'
+                    try
                     {
-                        throw new InvalidOperationException("Não é possível adicionar mais itens: estoque insuficiente.");
+                        int newTotal = checked(existing.Quantity + dto.Quantity);
+
+                        if (newTotal > MaxQuantityPerItem)
+                            throw new InvalidOperationException($"O total de itens excederia o limite máximo de {MaxQuantityPerItem}.");
+
+                        if (product.StockQuantity < newTotal)
+                            throw new InvalidOperationException("Não é possível adicionar mais itens: estoque insuficiente.");
+
+                        existing.Quantity = newTotal;
                     }
-                    existing.Quantity = newTotal;
+                    catch (OverflowException)
+                    {
+                        throw new InvalidOperationException("Quantidade inválida (Excesso de itens).");
+                    }
                 }
                 else
                 {
@@ -122,19 +131,14 @@ public class CartService : ICartService
                 }
 
                 cart.LastUpdated = DateTime.UtcNow;
-
-                // Persistir usando UnitOfWork para manter consistência
                 await _uow.CommitAsync();
-
                 await transaction.CommitAsync();
                 return;
             }
             catch (DbUpdateConcurrencyException)
             {
                 await transaction.RollbackAsync();
-                if (attempt == MaxConcurrencyRetries)
-                    throw;
-                // retry
+                if (attempt == MaxConcurrencyRetries) throw;
             }
             catch
             {
@@ -147,7 +151,12 @@ public class CartService : ICartService
     public async Task UpdateItemQuantityAsync(string userId, Guid cartItemId, int quantity)
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId inválido.", nameof(userId));
-        if (quantity <= 0)
+
+        // VALIDAÇÃO: Não aceita negativos. Zero remove o item.
+        if (quantity < 0) throw new ArgumentException("A quantidade não pode ser negativa.");
+        if (quantity > MaxQuantityPerItem) throw new ArgumentException($"Quantidade excede o limite permitido de {MaxQuantityPerItem}.");
+
+        if (quantity == 0)
         {
             await RemoveItemAsync(userId, cartItemId);
             return;
@@ -170,15 +179,9 @@ public class CartService : ICartService
                     .Where(p => p.Id == item.ProductId && p.IsActive)
                     .SingleOrDefaultAsync();
 
-                if (product == null)
-                {
-                    throw new InvalidOperationException("Produto indisponível.");
-                }
+                if (product == null) throw new InvalidOperationException("Produto indisponível.");
 
-                if (product.StockQuantity < quantity)
-                {
-                    throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
-                }
+                if (product.StockQuantity < quantity) throw new InvalidOperationException("Estoque insuficiente.");
 
                 item.Quantity = quantity;
                 cart.LastUpdated = DateTime.UtcNow;
@@ -190,9 +193,7 @@ public class CartService : ICartService
             catch (DbUpdateConcurrencyException)
             {
                 await transaction.RollbackAsync();
-                if (attempt == MaxConcurrencyRetries)
-                    throw;
-                // retry
+                if (attempt == MaxConcurrencyRetries) throw;
             }
             catch
             {

@@ -20,48 +20,45 @@ using Microsoft.AspNetCore.ResponseCompression;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
-using System.Linq; // added for error logging and Select
+using Microsoft.Extensions.Http.Resilience; // NOVO: Pacote moderno de resiliência
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Carrega variáveis de ambiente
+// 1. Carrega variáveis de ambiente
 if (builder.Environment.IsDevelopment())
 {
     DotNetEnv.Env.Load();
 }
 builder.Configuration.AddEnvironmentVariables();
 
-// Forwarded headers must be processed early when behind reverse proxy / load balancer
+// 2. Configura Headers de Proxy (Importante para IP real no Rate Limit)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Optionally clear to accept all proxies if you control infrastructure
-    // options.KnownNetworks.Clear(); options.KnownProxies.Clear();
 });
 
-// --- SEGURANÇA: Validação da Chave JWT ---
-// CORREÇÃO: Removemos o fallback inseguro. A chave DEVE vir do ambiente ou configuração segura.
+// 3. SEGURANÇA: Validação Crítica da Chave JWT
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? builder.Configuration["Jwt:Key"];
 if (string.IsNullOrEmpty(jwtKey) || jwtKey.Length < 32)
 {
     throw new Exception("FATAL: JWT_SECRET_KEY não configurada ou insegura (mínimo 32 caracteres).");
 }
 
-// Serviços Básicos
-builder.Services.AddHttpClient();
+// 4. Serviços Básicos
+builder.Services.AddHttpClient(); // Cliente genérico
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
-
 builder.Services.AddMemoryCache();
 
+// Redis (Opcional/Configurável)
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
     options.InstanceName = "GraficaModerna_";
 });
 
-// Compressão
+// Compressão Gzip/Brotli
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -69,30 +66,102 @@ builder.Services.AddResponseCompression(options =>
     options.Providers.Add<GzipCompressionProvider>();
 });
 
-// --- SEGURANÇA: Rate Limiting ---
+// 5. CONFIGURAÇÃO DE CLIENTES HTTP COM RESILIÊNCIA (NOVO)
+// Cliente do Melhor Envio blindado contra falhas e lentidão
+builder.Services.AddHttpClient("MelhorEnvio", client =>
+{
+    var url = Environment.GetEnvironmentVariable("MELHOR_ENVIO_URL")
+              ?? builder.Configuration["MelhorEnvio:Url"]
+              ?? "https://melhorenvio.com.br/api/v2/";
+
+    client.BaseAddress = new Uri(url);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+    var userAgent = builder.Configuration["MelhorEnvio:UserAgent"] ?? "GraficaModernaAPI/1.0";
+    client.DefaultRequestHeaders.Add("User-Agent", userAgent);
+})
+.AddStandardResilienceHandler(options =>
+{
+    // Configurações otimizadas de resiliência
+    options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10); // Proteção Slow Loris
+    options.Retry.MaxRetryAttempts = 3;
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
+    options.CircuitBreaker.FailureRatio = 0.5;
+    options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+});
+
+// 6. SEGURANÇA: Rate Limiting Granular
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    // Limite Global
+    // A. Limite Global (Padrão)
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions { AutoReplenishment = true, PermitLimit = 300, QueueLimit = 2, Window = TimeSpan.FromMinutes(1) }));
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 300,
+                QueueLimit = 2,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 
-    // Política Específica para Auth (Login/Register)
+    // B. Auth (Login/Register) - Estrito para evitar Brute Force
     options.AddPolicy("AuthPolicy", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions { AutoReplenishment = true, PermitLimit = 10, QueueLimit = 0, Window = TimeSpan.FromMinutes(5) }));
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 10,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(5)
+            }));
+
+    // C. Uploads - Muito Estrito (Disco/CPU Heavy)
+    options.AddPolicy("UploadPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 5,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // D. Frete (Shipping) - Moderado (Custo de API externa)
+    options.AddPolicy("ShippingPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 15,
+                QueueLimit = 2,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // E. Pagamentos - Restrito (Segurança Financeira)
+    options.AddPolicy("PaymentPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 10,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
-// Banco de Dados
+// 7. Banco de Dados
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("GraficaModerna.Infrastructure")));
 
-    // --- SEGURANÇA: Identity (Senhas Fortes) ---
+// 8. Identity (Senhas Fortes)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
     options.Password.RequireDigit = true;
     options.Password.RequireLowercase = true;
@@ -105,9 +174,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// --- SEGURANÇA: JWT com Bearer Authorization header ---
+// 9. Autenticação JWT
 var key = Encoding.ASCII.GetBytes(jwtKey);
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -131,11 +199,8 @@ builder.Services.AddAuthentication(options =>
 
     options.Events = new JwtBearerEvents
     {
-        // Do NOT read token from cookie. Require Authorization: Bearer <token>
         OnMessageReceived = context =>
         {
-            // If Authorization header present, let the handler use it.
-            // If no header, do not accept cookie-based token to avoid mixed modes.
             return Task.CompletedTask;
         },
         OnTokenValidated = async context =>
@@ -152,7 +217,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Injeção de Dependências
+// 10. Injeção de Dependências
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICartRepository, CartRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
@@ -179,13 +244,13 @@ builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddTransient<JwtValidationMiddleware>();
 
-// Swagger Config
+// 11. Swagger Config
 builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Grafica API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Insira o token JWT (Para uso via header, se necessário)",
+        Description = "Insira o token JWT (Authorization: Bearer <token>)",
         Name = "Authorization",
         Type = SecuritySchemeType.ApiKey
     });
@@ -194,7 +259,7 @@ builder.Services.AddSwaggerGen(c => {
     });
 });
 
-// CORS Config
+// 12. CORS Config
 var allowedOrigins = builder.Configuration.GetSection("AllowedHosts").Get<string[]>()
                      ?? new[] { "http://localhost:5173", "http://localhost:3000" };
 
@@ -209,20 +274,21 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// ================= PIPELINE DE REQUISIÇÃO =================
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Grafica API v1");
-        c.RoutePrefix = "swagger"; // Garante que a rota seja /swagger
+        c.RoutePrefix = "swagger";
     });
 }
 
-// Ensure forwarded headers are applied early in the pipeline so RemoteIpAddress is correct
+// 1. Headers de Proxy e Segurança (Primeiro)
 app.UseForwardedHeaders();
 
-// Headers de Segurança
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Frame-Options", "DENY");
@@ -232,9 +298,10 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Middleware de Exceção
+// 2. Exception Middleware
 app.UseMiddleware<ExceptionMiddleware>();
 
+// 3. CORS
 app.UseCors("AllowFrontend");
 
 if (!app.Environment.IsDevelopment())
@@ -243,20 +310,20 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-// Rate limiter relies on forwarded headers
+// 4. Rate Limiter (Antes da Autenticação para proteger Auth endpoints)
 app.UseRateLimiter();
 
 app.UseStaticFiles();
 
+// 5. Autenticação e Autorização
 app.UseAuthentication();
 app.UseMiddleware<JwtValidationMiddleware>();
-
 app.UseAuthorization();
 
+// 6. Controllers
 app.MapControllers();
 
-// --- INICIALIZAÇÃO: Aplicar migrações e garantir roles + usuário Admin ---
-// --- INICIALIZAÇÃO: Aplicar migrações, garantir roles, Admin e Páginas Padrão ---
+// ================= INICIALIZAÇÃO DE DADOS =================
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -264,10 +331,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = services.GetRequiredService<AppDbContext>();
-        // 1. Aplicar migrações pendentes
         db.Database.Migrate();
 
-        // 2. Roles
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
@@ -280,7 +345,6 @@ using (var scope = app.Services.CreateScope())
             }
         }
 
-        // 3. Usuário Admin
         var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? app.Configuration["Admin:Email"];
         var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? app.Configuration["Admin:Password"];
 
@@ -311,38 +375,17 @@ using (var scope = app.Services.CreateScope())
             }
         }
 
-        // 4. SEED DE PÁGINAS (CORREÇÃO PARA O SEU PROBLEMA)
-        // Verifica se existem páginas. Se não, cria as padrões.
+        // Seed de Páginas Padrão
         if (!db.ContentPages.Any())
         {
             var defaultPages = new List<GraficaModerna.Domain.Entities.ContentPage>
             {
-                new GraficaModerna.Domain.Entities.ContentPage
-                {
-                    Title = "Sobre Nós",
-                    Slug = "about-us",
-                    Content = "<h1>Sobre a Gráfica Moderna</h1><p>Conte sua história aqui...</p>",
-                    LastUpdated = DateTime.UtcNow
-                },
-                new GraficaModerna.Domain.Entities.ContentPage
-                {
-                    Title = "Política de Privacidade",
-                    Slug = "privacy-policy",
-                    Content = "<h1>Política de Privacidade</h1><p>Descreva sua política aqui...</p>",
-                    LastUpdated = DateTime.UtcNow
-                },
-                new GraficaModerna.Domain.Entities.ContentPage
-                {
-                    Title = "Termos de Uso",
-                    Slug = "terms-of-use",
-                    Content = "<h1>Termos de Uso</h1><p>Defina as regras de uso aqui...</p>",
-                    LastUpdated = DateTime.UtcNow
-                }
+                new GraficaModerna.Domain.Entities.ContentPage { Title = "Sobre Nós", Slug = "about-us", Content = "<h1>Sobre</h1><p>...</p>", LastUpdated = DateTime.UtcNow },
+                new GraficaModerna.Domain.Entities.ContentPage { Title = "Política de Privacidade", Slug = "privacy-policy", Content = "<h1>Privacidade</h1><p>...</p>", LastUpdated = DateTime.UtcNow },
+                new GraficaModerna.Domain.Entities.ContentPage { Title = "Termos de Uso", Slug = "terms-of-use", Content = "<h1>Termos</h1><p>...</p>", LastUpdated = DateTime.UtcNow }
             };
-
             await db.ContentPages.AddRangeAsync(defaultPages);
             await db.SaveChangesAsync();
-            logger.LogInformation("Páginas padrão criadas com sucesso.");
         }
     }
     catch (Exception ex)

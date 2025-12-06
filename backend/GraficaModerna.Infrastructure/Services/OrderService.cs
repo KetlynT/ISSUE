@@ -17,6 +17,10 @@ public class OrderService : IOrderService
     private readonly IEnumerable<IShippingService> _shippingServices;
     private readonly IPaymentService _paymentService;
 
+    // Constantes de Validação
+    private const decimal MinOrderAmount = 1.00m;      // Mínimo R$ 1,00
+    private const decimal MaxOrderAmount = 100000.00m; // Máximo R$ 100.000,00
+
     public OrderService(
         AppDbContext context,
         IEmailService emailService,
@@ -33,7 +37,7 @@ public class OrderService : IOrderService
         _paymentService = paymentService;
     }
 
-    // 🔐 CENTRALIZA A SEGURANÇA
+    // Método auxiliar de segurança
     private async Task<Order> GetUserOrderOrFail(Guid orderId, string userId)
     {
         var order = await _context.Orders
@@ -49,9 +53,6 @@ public class OrderService : IOrderService
         return order;
     }
 
-    // ===========================
-    // CRIAÇÃO DO PEDIDO
-    // ===========================
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, string shippingMethod)
     {
         var cart = await _context.Carts
@@ -61,6 +62,10 @@ public class OrderService : IOrderService
 
         if (cart == null || !cart.Items.Any())
             throw new Exception("Carrinho vazio.");
+
+        // VALIDAÇÃO EXTRA: Verificar itens inválidos
+        if (cart.Items.Any(i => i.Quantity <= 0))
+            throw new Exception("O carrinho contém itens com quantidades inválidas.");
 
         // 1. Recalcular frete no backend
         var shippingItems = cart.Items.Select(i => new ShippingItemDto
@@ -85,7 +90,6 @@ public class OrderService : IOrderService
 
         decimal verifiedShippingCost = selectedOption.Price;
 
-        // 2. Transação + Estoque
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -95,6 +99,9 @@ public class OrderService : IOrderService
             foreach (var item in cart.Items)
             {
                 if (item.Product == null) continue;
+
+                if (item.Product.StockQuantity < item.Quantity)
+                    throw new Exception($"Estoque insuficiente para o produto {item.Product.Name}");
 
                 item.Product.DebitStock(item.Quantity);
                 _context.Entry(item.Product).State = EntityState.Modified;
@@ -110,25 +117,27 @@ public class OrderService : IOrderService
                 });
             }
 
-            // 3. Cupom
             decimal discount = 0;
-
             if (!string.IsNullOrWhiteSpace(couponCode))
             {
                 var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Code == couponCode.ToUpper());
-
                 if (coupon != null && coupon.IsValid())
                 {
                     bool alreadyUsed = await _context.CouponUsages.AnyAsync(u => u.UserId == userId && u.CouponCode == coupon.Code);
-
-                    if (alreadyUsed)
-                        throw new Exception("Cupom já utilizado.");
+                    if (alreadyUsed) throw new Exception("Cupom já utilizado.");
 
                     discount = subTotal * (coupon.DiscountPercentage / 100m);
                 }
             }
 
             decimal totalAmount = (subTotal - discount) + verifiedShippingCost;
+
+            // VALIDAÇÃO FINAL: Limites Financeiros do Pedido
+            if (totalAmount < MinOrderAmount)
+                throw new Exception($"O valor total do pedido deve ser no mínimo {MinOrderAmount:C}.");
+
+            if (totalAmount > MaxOrderAmount)
+                throw new Exception($"O valor do pedido excede o limite de segurança de {MaxOrderAmount:C}.");
 
             var formattedAddress =
                 $"{addressDto.Street}, {addressDto.Number} - {addressDto.Complement} - {addressDto.Neighborhood}, " +
@@ -170,7 +179,6 @@ public class OrderService : IOrderService
 
             await transaction.CommitAsync();
 
-            // Email não trava execução
             _ = SendOrderReceivedEmailAsync(userId, order.Id);
 
             return MapToDto(order);
@@ -182,20 +190,6 @@ public class OrderService : IOrderService
         }
     }
 
-    private async Task SendOrderReceivedEmailAsync(string userId, Guid orderId)
-    {
-        try
-        {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user != null)
-                await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{orderId} foi recebido.");
-        }
-        catch { }
-    }
-
-    // ===========================
-    // CONSULTAS
-    // ===========================
     public async Task<List<OrderDto>> GetUserOrdersAsync(string userId)
     {
         var orders = await _context.Orders
@@ -217,9 +211,6 @@ public class OrderService : IOrderService
         return orders.Select(MapToDto).ToList();
     }
 
-    // ===========================
-    // ADMIN
-    // ===========================
     public async Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
         var user = _httpContextAccessor.HttpContext?.User;
@@ -268,9 +259,6 @@ public class OrderService : IOrderService
         await _context.SaveChangesAsync();
     }
 
-    // ===========================
-    // WEBHOOK STRIPE
-    // ===========================
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId)
     {
         var order = await _context.Orders.FindAsync(orderId);
@@ -284,31 +272,31 @@ public class OrderService : IOrderService
         }
     }
 
-    // ===========================
-    // USUÁRIO: pagar
-    // ===========================
     public async Task PayOrderAsync(Guid orderId, string userId)
     {
         var order = await GetUserOrderOrFail(orderId, userId);
-
         order.Status = "Pago";
         await _context.SaveChangesAsync();
     }
 
-    // ===========================
-    // USUÁRIO: solicitar reembolso
-    // ===========================
     public async Task RequestRefundAsync(Guid orderId, string userId)
     {
         var order = await GetUserOrderOrFail(orderId, userId);
-
         order.Status = "Reembolso Solicitado";
         await _context.SaveChangesAsync();
     }
 
-    // ===========================
-    // MAP
-    // ===========================
+    private async Task SendOrderReceivedEmailAsync(string userId, Guid orderId)
+    {
+        try
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+                await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{orderId} foi recebido.");
+        }
+        catch { }
+    }
+
     private static OrderDto MapToDto(Order order)
     {
         return new OrderDto(
