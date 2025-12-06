@@ -11,9 +11,11 @@
 		<PackageReference Include="HtmlSanitizer" Version="9.0.889" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.2" />
 		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.2" />
-
+		
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2" />
 
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">

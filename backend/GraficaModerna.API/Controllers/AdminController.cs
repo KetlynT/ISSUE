@@ -2,6 +2,7 @@
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GraficaModerna.API.Controllers;
 
@@ -9,6 +10,7 @@ namespace GraficaModerna.API.Controllers;
 [ApiController]
 // SEGURANÇA MÁXIMA: Apenas Tokens com a Claim "Role: Admin" entram aqui.
 [Authorize(Roles = "Admin")]
+[EnableRateLimiting("AdminPolicy")]
 public class AdminController : ControllerBase
 {
     private readonly IOrderService _orderService;

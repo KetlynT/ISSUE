@@ -2,6 +2,8 @@
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces; // Supondo que exista um IContentService ou Repository
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
 
 namespace GraficaModerna.API.Controllers;
 
@@ -43,7 +45,8 @@ public class ContentController : ControllerBase
     // O método de criação/edição (POST/PUT) deve continuar sanitizando a entrada
     // para evitar "lixo" no banco, mas a segurança real vem do GET acima.
     [HttpPost]
-    // [Authorize(Roles = "Admin")] // Importante restringir quem cria conteúdo
+    [Authorize(Roles = "Admin")]
+    [EnableRateLimiting("AdminPolicy")]
     public async Task<IActionResult> Create([FromBody] CreateContentDto dto)
     {
         // Sanitização de Entrada (Input Sanitization) - Mantém o banco limpo

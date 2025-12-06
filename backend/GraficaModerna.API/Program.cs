@@ -154,6 +154,27 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));
+    options.AddPolicy("AdminPolicy", httpContext =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            AutoReplenishment = true,
+            PermitLimit = 20, // Limite estrito para admins
+            QueueLimit = 0,
+            Window = TimeSpan.FromMinutes(1)
+        }));
+
+    options.AddPolicy("UserActionPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 60, // Limite moderado para ações do usuário (endereços, etc)
+                QueueLimit = 2,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 // 7. Banco de Dados

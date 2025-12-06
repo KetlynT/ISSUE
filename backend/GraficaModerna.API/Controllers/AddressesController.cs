@@ -1,14 +1,16 @@
+using System.Security.Claims;
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
+[EnableRateLimiting("UserActionPolicy")]
 public class AddressesController : ControllerBase
 {
     private readonly IAddressService _service;
