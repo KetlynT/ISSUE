@@ -15,6 +15,11 @@ public class ContentRepository(AppDbContext context) : IContentRepository
             .FirstOrDefaultAsync(p => p.Slug == slug);
     }
 
+    public async Task<IEnumerable<ContentPage>> GetAllAsync()
+    {
+        return await _context.ContentPages.ToListAsync();
+    }
+
     public async Task AddAsync(ContentPage page)
     {
         _context.ContentPages.Add(page);
@@ -24,6 +29,28 @@ public class ContentRepository(AppDbContext context) : IContentRepository
     public async Task UpdateAsync(ContentPage page)
     {
         _context.ContentPages.Update(page);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<IEnumerable<SiteSetting>> GetSettingsAsync()
+    {
+        return await _context.SiteSettings.ToListAsync();
+    }
+
+    public async Task UpdateSettingsAsync(IEnumerable<SiteSetting> settings)
+    {
+        foreach (var setting in settings)
+        {
+            var existing = await _context.SiteSettings.FindAsync(setting.Key);
+            if (existing != null)
+            {
+                existing.UpdateValue(setting.Value);
+            }
+            else
+            {
+                await _context.SiteSettings.AddAsync(setting);
+            }
+        }
         await _context.SaveChangesAsync();
     }
 }

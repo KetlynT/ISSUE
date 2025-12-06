@@ -3,7 +3,6 @@ using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Domain.Interfaces;
 
-
 namespace GraficaModerna.Application.Services;
 
 public class ContentService(IContentRepository repository) : IContentService
@@ -13,6 +12,11 @@ public class ContentService(IContentRepository repository) : IContentService
     public async Task<ContentPage?> GetBySlugAsync(string slug)
     {
         return await _repository.GetBySlugAsync(slug);
+    }
+
+    public async Task<IEnumerable<ContentPage>> GetAllPagesAsync()
+    {
+        return await _repository.GetAllAsync();
     }
 
     public async Task<ContentPage> CreateAsync(CreateContentDto dto)
@@ -31,11 +35,23 @@ public class ContentService(IContentRepository repository) : IContentService
 
     public async Task UpdateAsync(string slug, UpdateContentDto dto)
     {
-        var page = await _repository.GetBySlugAsync(slug) ?? throw new Exception("P�gina n�o encontrada.");
+        var page = await _repository.GetBySlugAsync(slug) ?? throw new Exception("Página não encontrada.");
         page.Title = dto.Title;
         page.Content = dto.Content;
         page.LastUpdated = DateTime.UtcNow;
 
         await _repository.UpdateAsync(page);
+    }
+
+    public async Task<Dictionary<string, string>> GetSettingsAsync()
+    {
+        var settings = await _repository.GetSettingsAsync();
+        return settings.ToDictionary(s => s.Key, s => s.Value);
+    }
+
+    public async Task UpdateSettingsAsync(Dictionary<string, string> settingsDict)
+    {
+        var settingsList = settingsDict.Select(kvp => new SiteSetting(kvp.Key, kvp.Value)).ToList();
+        await _repository.UpdateSettingsAsync(settingsList);
     }
 }
