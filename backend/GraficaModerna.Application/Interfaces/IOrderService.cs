@@ -9,8 +9,9 @@ public interface IOrderService
     Task<List<OrderDto>> GetAllOrdersAsync();
     Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto);
 
-    // ATUALIZADO: Adicionado parâmetro amountPaidInCents para validação de segurança
+    // Certifique-se que esta linha tem os 3 parâmetros (incluindo long amountPaidInCents)
     Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId, long amountPaidInCents);
 
+    // Certifique-se de que NÃO existe um método "PayOrderAsync" aqui, pois ele não existe no Service
     Task RequestRefundAsync(Guid orderId, string userId);
 }

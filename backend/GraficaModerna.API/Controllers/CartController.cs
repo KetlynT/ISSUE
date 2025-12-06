@@ -9,16 +9,12 @@ namespace GraficaModerna.API.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize(Roles = "User")]
-public class CartController : ControllerBase
+// CORREÇÃO IDE0290: Parâmetros injetados direto na classe
+public class CartController(ICartService cartService, IOrderService orderService) : ControllerBase
 {
-    private readonly ICartService _cartService;
-    private readonly IOrderService _orderService;
-
-    public CartController(ICartService cartService, IOrderService orderService)
-    {
-        _cartService = cartService;
-        _orderService = orderService;
-    }
+    // Atribuímos os parâmetros do construtor primário aos campos privados
+    private readonly ICartService _cartService = cartService;
+    private readonly IOrderService _orderService = orderService;
 
     private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
@@ -65,12 +61,10 @@ public class CartController : ControllerBase
             if (string.IsNullOrEmpty(request.Address.ZipCode) || string.IsNullOrEmpty(request.Address.Street))
                 return BadRequest("Endereço de entrega inválido.");
 
-            // CORREÇÃO: Removemos o request.ShippingCost desta chamada
             var order = await _orderService.CreateOrderFromCartAsync(
                 GetUserId(),
                 request.Address,
                 request.CouponCode,
-                // request.ShippingCost,  <-- REMOVIDO: O backend calcula isso agora
                 request.ShippingMethod
             );
 
@@ -80,5 +74,4 @@ public class CartController : ControllerBase
     }
 }
 
-// Atualizamos o DTO para incluir o frete
 public record CheckoutRequest(CreateAddressDto Address, string? CouponCode, decimal ShippingCost, string ShippingMethod);

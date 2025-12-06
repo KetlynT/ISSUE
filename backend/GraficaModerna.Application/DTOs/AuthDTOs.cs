@@ -28,6 +28,3 @@ public class TokenModel
     public string? AccessToken { get; set; }
     public string? RefreshToken { get; set; }
 }
-
-public record UserProfileDto(string FullName, string Email, string PhoneNumber);
-public record UpdateProfileDto(string FullName, string PhoneNumber);

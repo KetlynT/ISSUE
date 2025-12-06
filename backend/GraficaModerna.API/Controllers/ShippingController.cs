@@ -2,54 +2,45 @@
 using GraficaModerna.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Linq; // Necessário para o .Where(char.IsDigit)
+using System.Linq;
 
 namespace GraficaModerna.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[EnableRateLimiting("ShippingPolicy")] // Proteção contra abuso (Rate Limiting)
-public class ShippingController : ControllerBase
+[EnableRateLimiting("ShippingPolicy")]
+// CORREÇÃO IDE0290: Construtor Primário
+public class ShippingController(
+    IEnumerable<IShippingService> shippingServices,
+    IProductService productService,
+    ILogger<ShippingController> logger) : ControllerBase
 {
-    private readonly IEnumerable<IShippingService> _shippingServices;
-    private readonly IProductService _productService;
-    private readonly ILogger<ShippingController> _logger; // Injeção do Logger para segurança
+    private readonly IEnumerable<IShippingService> _shippingServices = shippingServices;
+    private readonly IProductService _productService = productService;
+    private readonly ILogger<ShippingController> _logger = logger;
     private const int MaxItemsPerCalculation = 50;
-
-    public ShippingController(
-        IEnumerable<IShippingService> shippingServices,
-        IProductService productService,
-        ILogger<ShippingController> logger)
-    {
-        _shippingServices = shippingServices;
-        _productService = productService;
-        _logger = logger;
-    }
 
     [HttpPost("calculate")]
     public async Task<ActionResult<List<ShippingOptionDto>>> Calculate([FromBody] CalculateShippingRequest request)
     {
-        // 1. VALIDAÇÃO BÁSICA
         if (request == null || string.IsNullOrWhiteSpace(request.DestinationCep))
             return BadRequest(new { message = "CEP de destino inválido." });
 
-        // 2. SANITIZAÇÃO DE INPUT (Segurança)
-        // Remove qualquer caractere que não seja número (hífens, espaços, letras)
-        var cleanCep = new string(request.DestinationCep.Where(char.IsDigit).ToArray());
+        var cleanCep = new string([.. request.DestinationCep.Where(char.IsDigit)]);
 
         if (cleanCep.Length != 8)
             return BadRequest(new { message = "CEP inválido. Certifique-se de informar os 8 dígitos numéricos." });
 
-        // 3. VALIDAÇÃO DE ITENS
-        if (request.Items == null || !request.Items.Any())
+        // CORREÇÃO CA1860: Usar Count ou Length em vez de Any()
+        if (request.Items == null || request.Items.Count == 0)
             return BadRequest(new { message = "Nenhum item informado para cálculo." });
 
         if (request.Items.Count > MaxItemsPerCalculation)
             return BadRequest(new { message = $"O cálculo é limitado a {MaxItemsPerCalculation} itens distintos por vez." });
 
-        var validatedItems = new List<ShippingItemDto>();
+        // CORREÇÃO IDE0028: Inicialização simplificada
+        List<ShippingItemDto> validatedItems = [];
 
-        // 4. PREPARAÇÃO DOS DADOS (Busca detalhes seguros do produto no banco)
         foreach (var item in request.Items)
         {
             if (item.Quantity <= 0)
@@ -76,15 +67,15 @@ public class ShippingController : ControllerBase
             }
         }
 
-        if (!validatedItems.Any())
+        // CORREÇÃO CA1860: Count == 0
+        if (validatedItems.Count == 0)
             return BadRequest(new { message = "Nenhum produto válido encontrado para cálculo." });
 
-        var allOptions = new List<ShippingOptionDto>();
+        // CORREÇÃO IDE0028: Inicialização simplificada
+        List<ShippingOptionDto> allOptions = [];
 
         try
         {
-            // 5. CÁLCULO EXTERNO
-            // Utiliza o 'cleanCep' sanitizado
             var tasks = _shippingServices.Select(service => service.CalculateAsync(cleanCep, validatedItems));
             var results = await Task.WhenAll(tasks);
 
@@ -97,11 +88,7 @@ public class ShippingController : ControllerBase
         }
         catch (Exception ex)
         {
-            // CORREÇÃO DE SEGURANÇA:
-            // Logamos o erro técnico com StackTrace no servidor
             _logger.LogError(ex, "Erro crítico ao calcular frete para CEP {Cep}", cleanCep);
-
-            // Retornamos apenas uma mensagem amigável para o cliente (sem ex.Message)
             return StatusCode(500, new { message = "Não foi possível calcular o frete no momento. Tente novamente mais tarde." });
         }
     }
@@ -112,8 +99,7 @@ public class ShippingController : ControllerBase
         if (string.IsNullOrWhiteSpace(cep))
             return BadRequest(new { message = "CEP inválido." });
 
-        // Sanitização
-        var cleanCep = new string(cep.Where(char.IsDigit).ToArray());
+        var cleanCep = new string([.. cep.Where(char.IsDigit)]);
 
         if (cleanCep.Length != 8)
             return BadRequest(new { message = "CEP inválido. Informe apenas os 8 dígitos." });
@@ -133,9 +119,11 @@ public class ShippingController : ControllerBase
                 Quantity = 1
             };
 
-            var allOptions = new List<ShippingOptionDto>();
+            // CORREÇÃO IDE0028/IDE0305: Uso de [] para criar lista
+            List<ShippingOptionDto> allOptions = [];
 
-            var tasks = _shippingServices.Select(s => s.CalculateAsync(cleanCep, new List<ShippingItemDto> { item }));
+            // CORREÇÃO IDE0305: Passando lista simplificada no parâmetro
+            var tasks = _shippingServices.Select(s => s.CalculateAsync(cleanCep, [item]));
             var results = await Task.WhenAll(tasks);
 
             foreach (var result in results) allOptions.AddRange(result);
@@ -144,9 +132,7 @@ public class ShippingController : ControllerBase
         }
         catch (Exception ex)
         {
-            // CORREÇÃO DE SEGURANÇA
             _logger.LogError(ex, "Erro ao calcular frete único para Produto {ProductId} e CEP {Cep}", productId, cleanCep);
-
             return StatusCode(500, new { message = "Serviço de cálculo de frete indisponível temporariamente." });
         }
     }
