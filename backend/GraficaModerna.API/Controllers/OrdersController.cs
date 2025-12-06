@@ -24,8 +24,9 @@ public class OrdersController : ControllerBase
         try
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
-            // SEGURANÇA: Não passamos mais o ShippingCost vindo do cliente
+            // SEGURAN?A: N?o passamos mais o ShippingCost vindo do cliente
             var order = await _orderService.CreateOrderFromCartAsync(
                 userId,
                 dto.Address,
@@ -45,6 +46,8 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> GetMyOrders()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
+
         var orders = await _orderService.GetUserOrdersAsync(userId);
         return Ok(orders);
     }
@@ -63,6 +66,8 @@ public class OrdersController : ControllerBase
         try
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
+
             await _orderService.RequestRefundAsync(id, userId);
             return Ok();
         }
@@ -75,8 +80,7 @@ public class OrdersController : ControllerBase
 
 public class CheckoutDto
 {
-    public CreateAddressDto Address { get; set; }
+    public required CreateAddressDto Address { get; set; }
     public string? CouponCode { get; set; }
-    // REMOVIDO: public decimal ShippingCost { get; set; } // Segurança
-    public string ShippingMethod { get; set; }
+    public required string ShippingMethod { get; set; }
 }

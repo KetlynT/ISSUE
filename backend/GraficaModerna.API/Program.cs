@@ -1,6 +1,5 @@
 using GraficaModerna.API.Middlewares;
 using GraficaModerna.Application.Interfaces;
-using GraficaModerna.Application.Mappings;
 using GraficaModerna.Application.Services;
 using GraficaModerna.Application.Validators;
 using GraficaModerna.Domain.Entities;
@@ -18,11 +17,10 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Ganss.Xss;
 using Microsoft.AspNetCore.ResponseCompression;
-using System.IO.Compression;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.HttpOverrides;
+using System.Linq; // added for error logging and Select
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,7 +92,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("GraficaModerna.Infrastructure")));
 
-// --- SEGURANÇA: Identity (Senhas Fortes) ---
+    // --- SEGURANÇA: Identity (Senhas Fortes) ---
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options => {
     options.Password.RequireDigit = true;
     options.Password.RequireLowercase = true;
@@ -176,7 +174,6 @@ builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 builder.Services.AddScoped<IEmailService, ConsoleEmailService>();
 builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
 
-builder.Services.AddAutoMapper(typeof(DomainMappingProfile));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
 
@@ -257,5 +254,103 @@ app.UseMiddleware<JwtValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// --- INICIALIZAÇÃO: Aplicar migrações e garantir roles + usuário Admin ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var db = services.GetRequiredService<AppDbContext>();
+        // Aplicar migrações pendentes
+        db.Database.Migrate();
+
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var roles = new[] { "Admin", "User" };
+        foreach (var role in roles)
+        {
+            if (!roleManager.RoleExistsAsync(role).Result)
+            {
+                var res = roleManager.CreateAsync(new IdentityRole(role)).Result;
+                if (!res.Succeeded)
+                {
+                    logger.LogWarning("Não foi possível criar role '{Role}': {Errors}", role, string.Join(", ", res.Errors.Select(e => e.Description)));
+                }
+                else
+                {
+                    logger.LogInformation("Role criada: {Role}", role);
+                }
+            }
+        }
+
+        var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? app.Configuration["Admin:Email"];
+        var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? app.Configuration["Admin:Password"];
+
+        // If credentials not provided, in Development create a temporary admin for convenience
+        if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+        {
+            if (app.Environment.IsDevelopment())
+            {
+                // Generate a strong temporary password that meets Identity requirements
+                var guidPart = Guid.NewGuid().ToString("N").Substring(0, 12);
+                var tempPassword = $"Adm!{guidPart}A1"; // contains upper, lower, digit and non-alphanumeric
+                adminEmail ??= "admin.local@local.local";
+                adminPassword ??= tempPassword;
+
+                logger.LogInformation("ADMIN_EMAIL/ADMIN_PASSWORD não configuradas. Criando usuário Admin temporário (apenas Development). Email: {Email}", adminEmail);
+                // Do not log the password to avoid leaking secrets into logs. If you need it, set ADMIN_EMAIL/ADMIN_PASSWORD.
+                logger.LogInformation("Usuário Admin temporário criado em Development. Altere a senha imediatamente via painel ou API.");
+            }
+            else
+            {
+                logger.LogWarning("Credenciais do Admin não configuradas. Para criar Admin automaticamente defina as variáveis de ambiente ADMIN_EMAIL e ADMIN_PASSWORD ou as chaves de configuração Admin:Email e Admin:Password.");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
+        {
+            var adminUser = userManager.FindByEmailAsync(adminEmail).Result;
+            if (adminUser == null)
+            {
+                adminUser = new ApplicationUser
+                {
+                    UserName = adminEmail,
+                    Email = adminEmail,
+                    EmailConfirmed = true
+                };
+
+                var createResult = userManager.CreateAsync(adminUser, adminPassword).Result;
+                if (!createResult.Succeeded)
+                {
+                    logger.LogError("Falha ao criar usuário Admin ({Email}): {Errors}", adminEmail, string.Join(", ", createResult.Errors.Select(e => e.Description)));
+                }
+                else
+                {
+                    userManager.AddToRoleAsync(adminUser, "Admin").Wait();
+                    logger.LogInformation("Usuário Admin criado: {Email}", adminEmail);
+                }
+            }
+            else
+            {
+                if (!userManager.IsInRoleAsync(adminUser, "Admin").Result)
+                {
+                    userManager.AddToRoleAsync(adminUser, "Admin").Wait();
+                    logger.LogInformation("Usuário existente adicionado à role Admin: {Email}", adminEmail);
+                }
+                else
+                {
+                    logger.LogInformation("Usuário Admin já existe: {Email}", adminEmail);
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro ao aplicar migrações ou criar roles/usuário Admin.");
+    }
+}
 
 app.Run();
