@@ -37,11 +37,42 @@ public class OrderService : IOrderService
         _paymentService = paymentService;
     }
 
-    // Método auxiliar de segurança
+    // =================================================================================
+    // MÉTODOS AUXILIARES DE AUDITORIA E SEGURANÇA
+    // =================================================================================
+
+    private string GetIpAddress() =>
+        _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "0.0.0.0";
+
+    private string GetUserAgent() =>
+        _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString() ?? "Unknown";
+
+    /// <summary>
+    /// Centraliza a alteração de status para garantir que o histórico seja sempre gerado.
+    /// </summary>
+    private void AddAuditLog(Order order, string newStatus, string message, string changedBy)
+    {
+        // Atualiza o status principal do pedido
+        order.Status = newStatus;
+
+        // Adiciona o registro no histórico
+        order.History.Add(new OrderHistory
+        {
+            OrderId = order.Id,
+            Status = newStatus,
+            Message = message,
+            ChangedBy = changedBy,
+            Timestamp = DateTime.UtcNow,
+            IpAddress = GetIpAddress(),
+            UserAgent = GetUserAgent()
+        });
+    }
+
     private async Task<Order> GetUserOrderOrFail(Guid orderId, string userId)
     {
         var order = await _context.Orders
             .Include(o => o.Items)
+            .Include(o => o.History) // Importante carregar o histórico
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
         if (order == null)
@@ -53,6 +84,10 @@ public class OrderService : IOrderService
         return order;
     }
 
+    // =================================================================================
+    // FUNCIONALIDADES PRINCIPAIS
+    // =================================================================================
+
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, string shippingMethod)
     {
         var cart = await _context.Carts
@@ -63,11 +98,11 @@ public class OrderService : IOrderService
         if (cart == null || !cart.Items.Any())
             throw new Exception("Carrinho vazio.");
 
-        // VALIDAÇÃO EXTRA: Verificar itens inválidos
+        // Validação de itens inválidos
         if (cart.Items.Any(i => i.Quantity <= 0))
             throw new Exception("O carrinho contém itens com quantidades inválidas.");
 
-        // 1. Recalcular frete no backend
+        // 1. Recalcular frete no backend (Segurança contra manipulação no front)
         var shippingItems = cart.Items.Select(i => new ShippingItemDto
         {
             ProductId = i.ProductId,
@@ -103,6 +138,7 @@ public class OrderService : IOrderService
                 if (item.Product.StockQuantity < item.Quantity)
                     throw new Exception($"Estoque insuficiente para o produto {item.Product.Name}");
 
+                // Baixa no estoque
                 item.Product.DebitStock(item.Quantity);
                 _context.Entry(item.Product).State = EntityState.Modified;
 
@@ -132,7 +168,7 @@ public class OrderService : IOrderService
 
             decimal totalAmount = (subTotal - discount) + verifiedShippingCost;
 
-            // VALIDAÇÃO FINAL: Limites Financeiros do Pedido
+            // Validação de Limites Financeiros
             if (totalAmount < MinOrderAmount)
                 throw new Exception($"O valor total do pedido deve ser no mínimo {MinOrderAmount:C}.");
 
@@ -157,12 +193,27 @@ public class OrderService : IOrderService
                 TotalAmount = totalAmount,
                 AppliedCoupon = couponCode?.ToUpper(),
                 Items = orderItems,
-                CustomerIp = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString()
+
+                // Auditoria Inicial
+                CustomerIp = GetIpAddress(),
+                UserAgent = GetUserAgent()
             };
+
+            // Adiciona o primeiro log no histórico
+            order.History.Add(new OrderHistory
+            {
+                Status = "Pendente",
+                Message = "Pedido criado via Checkout",
+                ChangedBy = userId,
+                Timestamp = DateTime.UtcNow,
+                IpAddress = GetIpAddress(),
+                UserAgent = GetUserAgent()
+            });
 
             _context.Orders.Add(order);
             await _context.SaveChangesAsync();
 
+            // Registra uso do cupom se houver
             if (discount > 0 && couponCode != null)
             {
                 _context.CouponUsages.Add(new CouponUsage
@@ -174,11 +225,13 @@ public class OrderService : IOrderService
                 });
             }
 
+            // Limpa o carrinho
             _context.CartItems.RemoveRange(cart.Items);
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
 
+            // Dispara email em background
             _ = SendOrderReceivedEmailAsync(userId, order.Id);
 
             return MapToDto(order);
@@ -214,22 +267,30 @@ public class OrderService : IOrderService
     public async Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
         var user = _httpContextAccessor.HttpContext?.User;
+        var adminUserId = _userManager.GetUserId(user!) ?? "AdminUnknown";
 
         if (user == null || !user.IsInRole("Admin"))
             throw new UnauthorizedAccessException("Apenas administradores podem alterar pedidos.");
 
-        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
+        var order = await _context.Orders
+            .Include(o => o.History)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
         if (order == null) throw new Exception("Pedido não encontrado");
 
+        string auditMessage = $"Status alterado manualmente para {dto.Status}";
+
+        // Lógica específica por status
         if (dto.Status == "Aguardando Devolução")
         {
             if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode))
                 order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
 
-            order.ReturnInstructions =
-                !string.IsNullOrEmpty(dto.ReturnInstructions)
-                    ? dto.ReturnInstructions
-                    : "Instruções padrão...";
+            order.ReturnInstructions = !string.IsNullOrEmpty(dto.ReturnInstructions)
+                ? dto.ReturnInstructions
+                : "Instruções padrão de devolução...";
+
+            auditMessage += ". Instruções geradas.";
         }
 
         if (dto.Status == "Reembolsado" || dto.Status == "Cancelado")
@@ -239,7 +300,7 @@ public class OrderService : IOrderService
                 try
                 {
                     await _paymentService.RefundPaymentAsync(order.StripePaymentIntentId);
-                    order.ReturnInstructions += " [Reembolso Stripe OK]";
+                    auditMessage += ". Reembolso processado no Stripe.";
                 }
                 catch (Exception ex)
                 {
@@ -252,37 +313,42 @@ public class OrderService : IOrderService
             order.DeliveryDate = DateTime.UtcNow;
 
         if (!string.IsNullOrEmpty(dto.TrackingCode))
+        {
             order.TrackingCode = dto.TrackingCode;
+            auditMessage += $" (Rastreio: {dto.TrackingCode})";
+        }
 
-        order.Status = dto.Status;
+        // Aplica a auditoria e mudança de status
+        AddAuditLog(order, dto.Status, auditMessage, $"Admin:{adminUserId}");
 
         await _context.SaveChangesAsync();
     }
 
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId)
     {
-        var order = await _context.Orders.FindAsync(orderId);
+        var order = await _context.Orders
+            .Include(o => o.History)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
         if (order == null) return;
 
         if (order.Status != "Pago")
         {
-            order.Status = "Pago";
             order.StripePaymentIntentId = transactionId;
+
+            // Webhooks são chamados pelo sistema, usamos uma constante para identificar
+            AddAuditLog(order, "Pago", $"Pagamento confirmado via Webhook. ID: {transactionId}", "STRIPE-WEBHOOK");
+
             await _context.SaveChangesAsync();
         }
-    }
-
-    public async Task PayOrderAsync(Guid orderId, string userId)
-    {
-        var order = await GetUserOrderOrFail(orderId, userId);
-        order.Status = "Pago";
-        await _context.SaveChangesAsync();
     }
 
     public async Task RequestRefundAsync(Guid orderId, string userId)
     {
         var order = await GetUserOrderOrFail(orderId, userId);
-        order.Status = "Reembolso Solicitado";
+
+        AddAuditLog(order, "Reembolso Solicitado", "Usuário solicitou cancelamento pelo painel.", userId);
+
         await _context.SaveChangesAsync();
     }
 
@@ -292,9 +358,12 @@ public class OrderService : IOrderService
         {
             var user = await _userManager.FindByIdAsync(userId);
             if (user != null)
-                await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{orderId} foi recebido.");
+                await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido", $"Seu pedido #{orderId} foi recebido e está sendo processado.");
         }
-        catch { }
+        catch
+        {
+            // Log de erro de envio de email (serilog, etc)
+        }
     }
 
     private static OrderDto MapToDto(Order order)

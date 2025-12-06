@@ -5,6 +5,7 @@ namespace GraficaModerna.Domain.Entities;
 public class Order
 {
     public Guid Id { get; set; }
+    // ... (campos existentes mantidos)
     public string UserId { get; set; } = string.Empty;
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     public DateTime? DeliveryDate { get; set; }
@@ -20,7 +21,7 @@ public class Order
     public string Status { get; set; } = "Pendente";
     public string? TrackingCode { get; set; }
 
-    // DADOS DO STRIPE (NOVOS)
+    // DADOS DO STRIPE
     public string? StripeSessionId { get; set; }
     public string? StripePaymentIntentId { get; set; }
 
@@ -32,8 +33,12 @@ public class Order
     public string ShippingAddress { get; set; } = string.Empty;
     public string ShippingZipCode { get; set; } = string.Empty;
 
-    // SEGURANÇA & AUDITORIA
+    // SEGURANÇA & AUDITORIA (ATUALIZADO)
     public string? CustomerIp { get; set; }
+    public string? UserAgent { get; set; } // NOVO: Identificação do dispositivo
 
     public List<OrderItem> Items { get; set; } = new();
+
+    // NOVO: Histórico de mudanças
+    public List<OrderHistory> History { get; set; } = new();
 }

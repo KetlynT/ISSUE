@@ -33,7 +33,7 @@ public class AuthController : ControllerBase
         var result = await _authService.RegisterAsync(dto);
 
         // Return token in body so SPA can store it (Authorization: Bearer)
-        return Ok(new { token = result.Token, result.Email, result.Role, message = "Cadastro realizado com sucesso." });
+        return Ok(new { token = result.AccessToken, result.Email, result.Role, message = "Cadastro realizado com sucesso." });
     }
 
     [EnableRateLimiting("AuthPolicy")]
@@ -43,7 +43,7 @@ public class AuthController : ControllerBase
         var result = await _authService.LoginAsync(dto);
 
         // Return token in body so SPA can store it (Authorization: Bearer)
-        return Ok(new { token = result.Token, result.Email, result.Role, message = "Login realizado com sucesso." });
+        return Ok(new { token = result.AccessToken, result.Email, result.Role, message = "Login realizado com sucesso." });
     }
 
     [HttpPost("logout")]
@@ -108,5 +108,25 @@ public class AuthController : ControllerBase
 
         await _authService.UpdateProfileAsync(userId, dto);
         return NoContent();
+    }
+
+    [HttpPost("refresh-token")]
+    [AllowAnonymous] // Importante: O usuário não tem token válido quando chama isso
+    public async Task<IActionResult> RefreshToken([FromBody] TokenModel tokenModel)
+    {
+        if (tokenModel is null)
+        {
+            return BadRequest("Requisição inválida");
+        }
+
+        try
+        {
+            var result = await _authService.RefreshTokenAsync(tokenModel);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }

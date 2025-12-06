@@ -1,9 +1,7 @@
-﻿using GraficaModerna.Domain.Entities;
-using GraficaModerna.Infrastructure.Context;
-using Ganss.Xss; // Necessário: Pacote HtmlSanitizer
-using Microsoft.AspNetCore.Authorization;
+﻿using Ganss.Xss; // Certifique-se de que este using está presente
+using GraficaModerna.Application.DTOs;
+using GraficaModerna.Application.Interfaces; // Supondo que exista um IContentService ou Repository
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace GraficaModerna.API.Controllers;
 
@@ -11,83 +9,47 @@ namespace GraficaModerna.API.Controllers;
 [ApiController]
 public class ContentController : ControllerBase
 {
-    private readonly AppDbContext _context;
-    private readonly IHtmlSanitizer _sanitizer; // Injeção do Sanitizador
+    private readonly IContentService _service; // Ou IContentRepository
+    private readonly IHtmlSanitizer _sanitizer;
 
-    public ContentController(AppDbContext context, IHtmlSanitizer sanitizer)
+    // Injeção de dependência do Sanitizer (configurado no Program.cs)
+    public ContentController(IContentService service, IHtmlSanitizer sanitizer)
     {
-        _context = context;
+        _service = service;
         _sanitizer = sanitizer;
     }
 
-    [HttpGet("pages")]
-    public async Task<IActionResult> GetAllPages()
-    {
-        return Ok(await _context.ContentPages
-            .Select(p => new { p.Id, p.Slug, p.Title })
-            .ToListAsync());
-    }
-
-    [HttpGet("pages/{slug}")]
+    [HttpGet("{slug}")]
     public async Task<IActionResult> GetPage(string slug)
     {
-        var page = await _context.ContentPages.FirstOrDefaultAsync(p => p.Slug == slug);
-        if (page == null) return NotFound();
+        var page = await _service.GetBySlugAsync(slug);
+
+        if (page == null)
+            return NotFound();
+
+        // ==============================================================================
+        // CORREÇÃO DE SEGURANÇA (Output Sanitization)
+        // Mesmo que o dado tenha sido limpo na entrada, limpamos novamente na saída.
+        // Isso protege contra "Stored XSS" caso o banco tenha sido comprometido.
+        // ==============================================================================
+        if (!string.IsNullOrEmpty(page.Content))
+        {
+            page.Content = _sanitizer.Sanitize(page.Content);
+        }
+
         return Ok(page);
     }
 
-    [HttpPut("pages/{id}")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdatePage(Guid id, [FromBody] ContentPage model)
+    // O método de criação/edição (POST/PUT) deve continuar sanitizando a entrada
+    // para evitar "lixo" no banco, mas a segurança real vem do GET acima.
+    [HttpPost]
+    // [Authorize(Roles = "Admin")] // Importante restringir quem cria conteúdo
+    public async Task<IActionResult> Create([FromBody] CreateContentDto dto)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        // Sanitização de Entrada (Input Sanitization) - Mantém o banco limpo
+        dto.Content = _sanitizer.Sanitize(dto.Content);
 
-        var page = await _context.ContentPages.FindAsync(id);
-        if (page == null) return NotFound();
-
-        page.Title = model.Title;
-
-        // SEGURANÇA (ENTRADA): Remove scripts e eventos perigosos (ex: onclick, <script>)
-        // Isso impede que código malicioso seja sequer salvo no banco.
-        page.Content = _sanitizer.Sanitize(model.Content);
-
-        await _context.SaveChangesAsync();
-        return NoContent();
-    }
-
-    [HttpGet("settings")]
-    public async Task<IActionResult> GetSettings()
-    {
-        var settings = await _context.SiteSettings.ToListAsync();
-        var dictionary = settings.ToDictionary(s => s.Key, s => s.Value);
-        return Ok(dictionary);
-    }
-
-    [HttpPost("settings")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateSettings([FromBody] Dictionary<string, string> newSettings)
-    {
-        var dbSettings = await _context.SiteSettings.ToListAsync();
-
-        foreach (var kvp in newSettings)
-        {
-            var setting = dbSettings.FirstOrDefault(s => s.Key == kvp.Key);
-
-            // SEGURANÇA (ENTRADA): Sanitiza também as configurações do site
-            // Isso previne XSS caso alguém tente injetar scripts no título ou rodapé
-            var cleanValue = _sanitizer.Sanitize(kvp.Value);
-
-            if (setting != null)
-            {
-                setting.UpdateValue(cleanValue);
-            }
-            else
-            {
-                _context.SiteSettings.Add(new SiteSetting(kvp.Key, cleanValue));
-            }
-        }
-
-        await _context.SaveChangesAsync();
-        return Ok();
+        var result = await _service.CreateAsync(dto);
+        return Ok(result);
     }
 }

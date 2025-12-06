@@ -4,7 +4,6 @@ namespace GraficaModerna.Application.Interfaces;
 
 public interface IOrderService
 {
-    // REMOVIDO: decimal frontendShippingCost
     Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode, string shippingMethod);
 
     Task<List<OrderDto>> GetUserOrdersAsync(string userId);
@@ -14,5 +13,6 @@ public interface IOrderService
 
     // Métodos de Pagamento
     Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId);
-    Task PayOrderAsync(Guid orderId, string userId);
+
+    // REMOVIDO: Task PayOrderAsync(Guid orderId, string userId); -> Risco de segurança/desnecessário
 }

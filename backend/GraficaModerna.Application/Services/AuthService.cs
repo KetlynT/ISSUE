@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography; // Necessário para RNG
 using System.Text;
 
 namespace GraficaModerna.Application.Services;
@@ -36,47 +37,65 @@ public class AuthService : IAuthService
 
         if (!result.Succeeded)
         {
-            // SEGURANÇA: Prevenção de User Enumeration (CWE-204)
-            // Não retornamos "Email já existe" diretamente para evitar varredura de usuários.
-
-            // Filtramos apenas erros de validação de senha (ex: "Senha precisa de um dígito"), 
-            // que são úteis para o usuário legítimo corrigir seu input.
             var safeErrors = result.Errors
-                .Where(e => e.Code.StartsWith("Password"))
-                .Select(e => e.Description);
+               .Where(e => e.Code.StartsWith("Password"))
+               .Select(e => e.Description);
 
             if (safeErrors.Any())
-            {
-                throw new Exception($"A senha não atende aos requisitos: {string.Join("; ", safeErrors)}");
-            }
+                throw new Exception($"Senha fraca: {string.Join("; ", safeErrors)}");
 
-            // Para outros erros (como duplicidade de email ou erro de banco),
-            // retornamos uma mensagem genérica segura.
-            // Idealmente, o erro original 'result.Errors' deve ser logado (ILogger) aqui.
-            throw new Exception("Não foi possível concluir o cadastro. Verifique os dados informados e tente novamente.");
+            throw new Exception("Erro ao criar usuário.");
         }
 
         await _userManager.AddToRoleAsync(user, Roles.User);
 
-        return await GenerateToken(user);
+        // Gera Access + Refresh Token
+        return await CreateTokenPairAsync(user);
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
 
-        // SEGURANÇA: Mensagem genérica para Login inválido
         if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
             throw new Exception("Credenciais inválidas.");
 
-        return await GenerateToken(user);
+        return await CreateTokenPairAsync(user);
     }
+
+    // =================================================================
+    //  LÓGICA DE REFRESH TOKEN (ROTAÇÃO)
+    // =================================================================
+    public async Task<AuthResponseDto> RefreshTokenAsync(TokenModel tokenModel)
+    {
+        if (tokenModel is null) throw new Exception("Requisição inválida");
+
+        string? accessToken = tokenModel.AccessToken;
+        string? refreshToken = tokenModel.RefreshToken;
+
+        var principal = GetPrincipalFromExpiredToken(accessToken);
+        if (principal == null) throw new Exception("Token de acesso ou refresh token inválido");
+
+        string username = principal.Identity!.Name!; // Mapeado do ClaimTypes.Name (no Identity é o UserName/Email)
+
+        // Como o Name no Identity pode ser UserName, buscamos pelo UserName
+        var user = await _userManager.FindByNameAsync(username);
+
+        if (user == null || user.RefreshToken != refreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        {
+            throw new Exception("Refresh token inválido ou expirado.");
+        }
+
+        // ROTAÇÃO: Geramos novos tokens e invalidamos o anterior
+        return await CreateTokenPairAsync(user);
+    }
+    // =================================================================
 
     public async Task<UserProfileDto> GetProfileAsync(string userId)
     {
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) throw new Exception("Usuário não encontrado.");
-        return new UserProfileDto(user.FullName, user.Email!, user.PhoneNumber);
+        return new UserProfileDto(user.FullName, user.Email!, user.PhoneNumber ?? "");
     }
 
     public async Task UpdateProfileAsync(string userId, UpdateProfileDto dto)
@@ -91,41 +110,91 @@ public class AuthService : IAuthService
         if (!result.Succeeded) throw new Exception("Erro ao atualizar perfil.");
     }
 
-    private async Task<AuthResponseDto> GenerateToken(ApplicationUser user)
+    // --- MÉTODOS AUXILIARES ---
+
+    private async Task<AuthResponseDto> CreateTokenPairAsync(ApplicationUser user)
     {
+        // 1. Gera Access Token (Curta Duração: 15 min)
+        var accessToken = GenerateAccessToken(user);
+
+        // 2. Gera Refresh Token (Longa Duração: 7 dias)
+        var refreshToken = GenerateRefreshToken();
+
+        // 3. Salva Refresh Token no Banco
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        await _userManager.UpdateAsync(user);
+
+        // Recupera Role para o retorno
         var roles = await _userManager.GetRolesAsync(user);
         var primaryRole = roles.Contains(Roles.Admin) ? Roles.Admin : (roles.FirstOrDefault() ?? Roles.User);
 
-        var claims = new List<Claim>
+        return new AuthResponseDto(new JwtSecurityTokenHandler().WriteToken(accessToken), refreshToken, user.Email!, primaryRole);
+    }
+
+    private JwtSecurityToken GenerateAccessToken(ApplicationUser user)
+    {
+        var userRoles = _userManager.GetRolesAsync(user).Result;
+        var primaryRole = userRoles.Contains(Roles.Admin) ? Roles.Admin : (userRoles.FirstOrDefault() ?? Roles.User);
+
+        var authClaims = new List<Claim>
         {
+            new Claim(ClaimTypes.Name, user.UserName!),
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email!),
-            new Claim(ClaimTypes.Name, user.FullName),
-            new Claim(ClaimTypes.Role, primaryRole)
+            new Claim(ClaimTypes.Role, primaryRole),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        // CORREÇÃO: Removemos a chave hardcoded de fallback.
-        // A consistência da chave deve ser garantida na inicialização (Program.cs).
         var keyString = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? _configuration["Jwt:Key"];
+        if (string.IsNullOrEmpty(keyString) || keyString.Length < 32) throw new Exception("Erro config JWT");
+        var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
 
-        if (string.IsNullOrEmpty(keyString) || keyString.Length < 32)
-            throw new Exception("Erro interno de configuração (Chave JWT ausente).");
+        return new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            expires: DateTime.UtcNow.AddMinutes(15), // Vida Curta
+            claims: authClaims,
+            signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+        );
+    }
 
-        var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(keyString));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+    private static string GenerateRefreshToken()
+    {
+        var randomNumber = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
+    }
 
-        var tokenDescriptor = new SecurityTokenDescriptor
+    private ClaimsPrincipal? GetPrincipalFromExpiredToken(string? token)
+    {
+        var keyString = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? _configuration["Jwt:Key"];
+        var tokenValidationParameters = new TokenValidationParameters
         {
-            Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(30),
-            SigningCredentials = creds,
-            Issuer = _configuration["Jwt:Issuer"],
-            Audience = _configuration["Jwt:Audience"]
+            ValidateAudience = false, // Pode ser true se configurado estritamente
+            ValidateIssuer = false,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString!)),
+            ValidateLifetime = false // Importante: aqui ignoramos a expiração para ler o token antigo
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
-        var token = tokenHandler.CreateToken(tokenDescriptor);
+        try
+        {
+            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
 
-        return new AuthResponseDto(tokenHandler.WriteToken(token), user.Email!, primaryRole);
+            if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            {
+                throw new SecurityTokenException("Token inválido");
+            }
+
+            return principal;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

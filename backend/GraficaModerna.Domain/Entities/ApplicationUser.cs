@@ -6,6 +6,7 @@ public class ApplicationUser : IdentityUser
 {
     public string FullName { get; set; } = string.Empty;
 
-    // Relação 1:N com endereços
-    public List<UserAddress> Addresses { get; set; } = new();
+    // NOVOS CAMPOS PARA REFRESH TOKEN
+    public string? RefreshToken { get; set; }
+    public DateTime RefreshTokenExpiryTime { get; set; }
 }
