@@ -256,6 +256,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // --- INICIALIZAÇÃO: Aplicar migrações e garantir roles + usuário Admin ---
+// --- INICIALIZAÇÃO: Aplicar migrações, garantir roles, Admin e Páginas Padrão ---
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -263,93 +264,90 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = services.GetRequiredService<AppDbContext>();
-        // Aplicar migrações pendentes
+        // 1. Aplicar migrações pendentes
         db.Database.Migrate();
 
+        // 2. Roles
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
 
         var roles = new[] { "Admin", "User" };
         foreach (var role in roles)
         {
-            if (!roleManager.RoleExistsAsync(role).Result)
+            if (!await roleManager.RoleExistsAsync(role))
             {
-                var res = roleManager.CreateAsync(new IdentityRole(role)).Result;
-                if (!res.Succeeded)
-                {
-                    logger.LogWarning("Não foi possível criar role '{Role}': {Errors}", role, string.Join(", ", res.Errors.Select(e => e.Description)));
-                }
-                else
-                {
-                    logger.LogInformation("Role criada: {Role}", role);
-                }
+                await roleManager.CreateAsync(new IdentityRole(role));
             }
         }
 
+        // 3. Usuário Admin
         var adminEmail = Environment.GetEnvironmentVariable("ADMIN_EMAIL") ?? app.Configuration["Admin:Email"];
         var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? app.Configuration["Admin:Password"];
 
-        // If credentials not provided, in Development create a temporary admin for convenience
         if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
         {
             if (app.Environment.IsDevelopment())
             {
-                // Generate a strong temporary password that meets Identity requirements
                 var guidPart = Guid.NewGuid().ToString("N").Substring(0, 12);
-                var tempPassword = $"Adm!{guidPart}A1"; // contains upper, lower, digit and non-alphanumeric
+                var tempPassword = $"Adm!{guidPart}A1";
                 adminEmail ??= "admin.local@local.local";
                 adminPassword ??= tempPassword;
-
-                logger.LogInformation("ADMIN_EMAIL/ADMIN_PASSWORD não configuradas. Criando usuário Admin temporário (apenas Development). Email: {Email}", adminEmail);
-                // Do not log the password to avoid leaking secrets into logs. If you need it, set ADMIN_EMAIL/ADMIN_PASSWORD.
-                logger.LogInformation("Usuário Admin temporário criado em Development. Altere a senha imediatamente via painel ou API.");
-            }
-            else
-            {
-                logger.LogWarning("Credenciais do Admin não configuradas. Para criar Admin automaticamente defina as variáveis de ambiente ADMIN_EMAIL e ADMIN_PASSWORD ou as chaves de configuração Admin:Email e Admin:Password.");
+                logger.LogInformation("Admin temporário criado (Development): {Email} / {Password}", adminEmail, tempPassword);
             }
         }
 
         if (!string.IsNullOrWhiteSpace(adminEmail) && !string.IsNullOrWhiteSpace(adminPassword))
         {
-            var adminUser = userManager.FindByEmailAsync(adminEmail).Result;
+            var adminUser = await userManager.FindByEmailAsync(adminEmail);
             if (adminUser == null)
             {
-                adminUser = new ApplicationUser
-                {
-                    UserName = adminEmail,
-                    Email = adminEmail,
-                    EmailConfirmed = true
-                };
-
-                var createResult = userManager.CreateAsync(adminUser, adminPassword).Result;
-                if (!createResult.Succeeded)
-                {
-                    logger.LogError("Falha ao criar usuário Admin ({Email}): {Errors}", adminEmail, string.Join(", ", createResult.Errors.Select(e => e.Description)));
-                }
-                else
-                {
-                    userManager.AddToRoleAsync(adminUser, "Admin").Wait();
-                    logger.LogInformation("Usuário Admin criado: {Email}", adminEmail);
-                }
+                adminUser = new ApplicationUser { UserName = adminEmail, Email = adminEmail, EmailConfirmed = true, FullName = "Administrador" };
+                var res = await userManager.CreateAsync(adminUser, adminPassword);
+                if (res.Succeeded) await userManager.AddToRoleAsync(adminUser, "Admin");
             }
-            else
+            else if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
             {
-                if (!userManager.IsInRoleAsync(adminUser, "Admin").Result)
-                {
-                    userManager.AddToRoleAsync(adminUser, "Admin").Wait();
-                    logger.LogInformation("Usuário existente adicionado à role Admin: {Email}", adminEmail);
-                }
-                else
-                {
-                    logger.LogInformation("Usuário Admin já existe: {Email}", adminEmail);
-                }
+                await userManager.AddToRoleAsync(adminUser, "Admin");
             }
+        }
+
+        // 4. SEED DE PÁGINAS (CORREÇÃO PARA O SEU PROBLEMA)
+        // Verifica se existem páginas. Se não, cria as padrões.
+        if (!db.ContentPages.Any())
+        {
+            var defaultPages = new List<GraficaModerna.Domain.Entities.ContentPage>
+            {
+                new GraficaModerna.Domain.Entities.ContentPage
+                {
+                    Title = "Sobre Nós",
+                    Slug = "about-us",
+                    Content = "<h1>Sobre a Gráfica Moderna</h1><p>Conte sua história aqui...</p>",
+                    LastUpdated = DateTime.UtcNow
+                },
+                new GraficaModerna.Domain.Entities.ContentPage
+                {
+                    Title = "Política de Privacidade",
+                    Slug = "privacy-policy",
+                    Content = "<h1>Política de Privacidade</h1><p>Descreva sua política aqui...</p>",
+                    LastUpdated = DateTime.UtcNow
+                },
+                new GraficaModerna.Domain.Entities.ContentPage
+                {
+                    Title = "Termos de Uso",
+                    Slug = "terms-of-use",
+                    Content = "<h1>Termos de Uso</h1><p>Defina as regras de uso aqui...</p>",
+                    LastUpdated = DateTime.UtcNow
+                }
+            };
+
+            await db.ContentPages.AddRangeAsync(defaultPages);
+            await db.SaveChangesAsync();
+            logger.LogInformation("Páginas padrão criadas com sucesso.");
         }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Erro ao aplicar migrações ou criar roles/usuário Admin.");
+        logger.LogError(ex, "Erro na inicialização do banco de dados.");
     }
 }
 

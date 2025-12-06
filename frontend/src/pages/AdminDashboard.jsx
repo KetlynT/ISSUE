@@ -13,7 +13,6 @@ import {
   ShoppingBag, Tag, Search, Eye, X, RefreshCcw, ArrowUp, ArrowDown, ArrowUpDown 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAuth } from '../context/AuthContext';

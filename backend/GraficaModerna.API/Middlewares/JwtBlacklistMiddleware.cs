@@ -18,7 +18,7 @@ public class JwtValidationMiddleware : IMiddleware
     {
         var token = ExtractToken(context);
 
-        // Sem token ? deixa seguir apenas para endpoints anônimos
+        // Sem token? deixa seguir apenas para endpoints que permitem acesso anónimo (o AuthorizeAttribute cuidará do resto)
         if (string.IsNullOrEmpty(token))
         {
             await next(context);
@@ -27,7 +27,7 @@ public class JwtValidationMiddleware : IMiddleware
 
         var jwtHandler = new JwtSecurityTokenHandler();
 
-        // Token malformado ? bloqueia
+        // Token malformado? bloqueia
         if (!jwtHandler.CanReadToken(token))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -54,17 +54,24 @@ public class JwtValidationMiddleware : IMiddleware
             return;
         }
 
-        // --- 3. Claims obrigatórias ---
-        string[] requiredClaims = { "sub", "email", "role" };
+        // --- 3. Claims obrigatórias (CORRIGIDO) ---
+        // O .NET usa "nameid" por padrão para o ID do utilizador, enquanto a RFC sugere "sub".
+        // A verificação abaixo aceita qualquer um dos dois para evitar o erro 401.
+        bool hasSubject = jwt.Claims.Any(c => c.Type == "sub" || c.Type == "nameid");
+        bool hasEmail = jwt.Claims.Any(c => c.Type == "email");
+        bool hasRole = jwt.Claims.Any(c => c.Type == "role");
 
-        foreach (var claim in requiredClaims)
+        if (!hasSubject || !hasEmail || !hasRole)
         {
-            if (!jwt.Claims.Any(c => c.Type == claim))
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsync($"Token ausente da claim obrigatória: {claim}");
-                return;
-            }
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+            var missing = new List<string>();
+            if (!hasSubject) missing.Add("sub/nameid");
+            if (!hasEmail) missing.Add("email");
+            if (!hasRole) missing.Add("role");
+
+            await context.Response.WriteAsync($"Token incompleto. Faltando claims obrigatórias: {string.Join(", ", missing)}");
+            return;
         }
 
         await next(context);

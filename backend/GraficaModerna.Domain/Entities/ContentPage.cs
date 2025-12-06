@@ -7,7 +7,7 @@
         public string Slug { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Content { get; set; } = string.Empty;
-
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
         public ContentPage() { } // Construtor vazio para EF
 
         public ContentPage(string slug, string title, string content)
@@ -16,6 +16,7 @@
             Slug = slug;
             Title = title;
             Content = content;
+            LastUpdated = DateTime.UtcNow;
         }
     }
 }

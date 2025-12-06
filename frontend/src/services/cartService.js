@@ -45,7 +45,7 @@ export const CartService = {
 
   // --- Admin ---
   getAllOrders: async () => {
-    const response = await api.get('/orders/admin/all');
+    const response = await api.get('/orders/all');
     return response.data;
   },
 

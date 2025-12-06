@@ -1,31 +1,43 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { CartService } from '../services/cartService'; // Mantém com chaves (Named Export)
-import AuthService from '../services/authService';     // CORREÇÃO: Remove chaves (Default Export)
+import { CartService } from '../services/cartService';
+import AuthService from '../services/authService'; 
 import toast from 'react-hot-toast';
+import { useAuth } from './AuthContext'; // 1. Importar o useAuth
 
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
+  const { user } = useAuth(); // 2. Pegar o usuário atual (que contém a role)
   const [cartCount, setCartCount] = useState(0);
   const [cartItems, setCartItems] = useState([]); 
   const [loading, setLoading] = useState(false);
 
-  // Inicialização
+  // 3. Reage a mudanças no usuário (Login, Logout ou carregamento inicial)
   useEffect(() => {
     refreshCart();
-  }, []);
+  }, [user]); 
 
   const refreshCart = async () => {
-    // CORREÇÃO: Agora AuthService.isAuthenticated() existirá com a alteração no service abaixo
-    if (AuthService.isAuthenticated()) {
+    // 4. BLOQUEIO PARA ADMIN: Se for admin, limpa estado e não faz requisição
+    if (user && user.role === 'Admin') {
+        setCartItems([]);
+        setCartCount(0);
+        return; 
+    }
+
+    // Lógica para Usuário Logado (Role: User)
+    // Usamos 'user' do contexto em vez de AuthService.isAuthenticated() para garantir consistência
+    if (user) { 
       try {
         const data = await CartService.getCart();
         setCartItems(data.items);
         updateCount(data.items);
       } catch (error) {
+        // Se der erro (ex: 403 ou 401), não crasha, apenas loga
         console.error("Erro ao carregar carrinho remoto", error);
       }
     } else {
+      // Lógica para Visitante (Guest)
       const localCart = JSON.parse(localStorage.getItem('guest_cart') || '[]');
       setCartItems(localCart);
       updateCount(localCart);
@@ -38,6 +50,12 @@ export const CartProvider = ({ children }) => {
   };
 
   const addToCart = async (product, quantity = 1) => {
+    // Segurança extra: Admin não adiciona itens
+    if (user && user.role === 'Admin') {
+        toast.error("Administradores não podem fazer compras.");
+        return;
+    }
+
     setLoading(true);
     
     const newItem = {
@@ -54,9 +72,9 @@ export const CartProvider = ({ children }) => {
     };
 
     try {
-      if (AuthService.isAuthenticated()) {
+      if (user) { // Usuário logado
         await CartService.addItem(newItem.productId, newItem.quantity);
-      } else {
+      } else { // Guest
         const localCart = JSON.parse(localStorage.getItem('guest_cart') || '[]');
         const existingIndex = localCart.findIndex(i => i.productId === newItem.productId);
 
@@ -72,7 +90,7 @@ export const CartProvider = ({ children }) => {
       }
       
       await refreshCart();
-      if(AuthService.isAuthenticated()) toast.success("Adicionado ao carrinho!");
+      if(user) toast.success("Adicionado ao carrinho!");
       
     } catch (error) {
       toast.error("Erro ao adicionar produto.");
@@ -82,7 +100,9 @@ export const CartProvider = ({ children }) => {
   };
 
   const updateQuantity = async (productId, newQuantity) => {
-    if (AuthService.isAuthenticated()) {
+    if (user && user.role === 'Admin') return; // Bloqueio
+
+    if (user) {
         const item = cartItems.find(i => i.productId === productId);
         if(item) await CartService.updateQuantity(item.id, newQuantity);
     } else {
@@ -100,7 +120,9 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (productId) => {
-    if (AuthService.isAuthenticated()) {
+    if (user && user.role === 'Admin') return;
+
+    if (user) {
         const item = cartItems.find(i => i.productId === productId);
         if(item) await CartService.removeItem(item.id);
     } else {
@@ -112,6 +134,12 @@ export const CartProvider = ({ children }) => {
   };
 
   const syncGuestCart = async () => {
+    // Admin nunca sincroniza carrinho
+    if (user && user.role === 'Admin') {
+        localStorage.removeItem('guest_cart'); // Limpa lixo se houver
+        return;
+    }
+
     const localCart = JSON.parse(localStorage.getItem('guest_cart') || '[]');
     if (localCart.length === 0) {
         await refreshCart();
