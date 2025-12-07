@@ -33,6 +33,10 @@ export const Profile = () => {
             <h2 className="text-xl font-bold text-gray-800">{userData.fullName}</h2>
             <p className="text-sm text-gray-500 mb-4 flex items-center gap-2 justify-center"><Mail size={14}/> {userData.email}</p>
             
+            <p className="text-sm text-gray-500 mb-2 flex items-center gap-2 justify-center">
+              <FileText size={14}/> {userData.cpfCnpj || 'CPF não informado'}
+            </p>
+
             <div className="w-full pt-4 border-t border-gray-100">
                <div className="flex items-center justify-center gap-2 text-gray-700 bg-gray-50 p-2 rounded-lg">
                   <Phone size={16} className="text-primary"/>

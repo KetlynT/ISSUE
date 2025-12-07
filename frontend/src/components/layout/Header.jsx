@@ -7,8 +7,9 @@ import { useAuth } from '../../context/AuthContext';
 
 export const Header = () => {
   const [logoUrl, setLogoUrl] = useState('');
-  const [siteName, setSiteName] = useState(''); // Começa vazio para não piscar padrão
+  const [siteName, setSiteName] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [purchaseEnabled, setPurchaseEnabled] = useState(true);
   
   const { cartCount } = useCart();
   const { user, logout, isAuthenticated } = useAuth();
@@ -22,8 +23,8 @@ export const Header = () => {
         const settings = await ContentService.getSettings();
         if (settings) {
             if (settings.site_logo) setLogoUrl(settings.site_logo);
-            // Se não tiver nome no banco, usa um padrão genérico, mas só agora
             setSiteName(settings.site_name || 'Gráfica Online');
+            if (settings.purchase_enabled === 'false') setPurchaseEnabled(false);
         }
       } catch (error) {
         console.error("Erro ao carregar topo", error);
@@ -70,16 +71,14 @@ export const Header = () => {
           {settingsLoading ? (
              <div className="animate-pulse h-4 w-24 bg-gray-200 rounded hidden md:block"></div>
           ) : (
-             // text-blue-600 -> text-primary
              <Link to="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-primary transition-colors font-medium">
                 <MessageSquare size={20} />
                 <span className="hidden lg:inline">Fale Conosco</span>
              </Link>
           )}
 
-          {!isAdmin && !settingsLoading && (
+          {!isAdmin && !settingsLoading && purchaseEnabled && (
             <Link to="/carrinho" className="relative group p-2">
-                {/* hover:text-blue-600 -> hover:text-primary */}
                 <ShoppingCart size={24} className="text-gray-600 group-hover:text-primary transition-colors" />
                 {cartCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm animate-bounce">
@@ -95,7 +94,6 @@ export const Header = () => {
                     {isAdmin ? (
                         <Link 
                             to="/putiroski/dashboard" 
-                            // Cores fixas substituídas por primary/10 para fundo e text-primary
                             className="flex items-center gap-2 text-sm font-bold text-primary bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all" 
                         >
                             <LayoutDashboard size={18} />
@@ -117,10 +115,11 @@ export const Header = () => {
                     </button>
                 </div>
             ) : (
-                // Botão de login adaptado para borda e texto primary
-                <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-primary hover:brightness-75 border border-gray-200 bg-gray-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
-                    <User size={18} /> Entrar
-                </Link>
+                purchaseEnabled && (
+                    <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-primary hover:brightness-75 border border-gray-200 bg-gray-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
+                        <User size={18} /> Entrar
+                    </Link>
+                )
             )
           )}
         </nav>

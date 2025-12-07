@@ -10,6 +10,7 @@ public record LoginDto(
 public record RegisterDto(
     [Required] string FullName,
     [Required] [EmailAddress] string Email,
+    [Required] string CpfCnpj,
     [Required] string Password,
     string PhoneNumber
 );
@@ -18,7 +19,8 @@ public record AuthResponseDto(
     string AccessToken,
     string RefreshToken,
     string Email,
-    string Role
+    string Role,
+    string CpfCnpj
 );
 
 public class TokenModel

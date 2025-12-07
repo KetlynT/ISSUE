@@ -8,6 +8,7 @@ export const Register = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    cpfCnpj: '',
     password: '',
     confirmPassword: '',
     phoneNumber: ''
@@ -39,6 +40,7 @@ export const Register = () => {
     try {
       await register({
         fullName: formData.fullName,
+        cpfCnpj: formData.cpfCnpj,
         email: formData.email,
         password: formData.password,
         phoneNumber: formData.phoneNumber
@@ -67,6 +69,21 @@ export const Register = () => {
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">CPF ou CNPJ</label>
+            <div className="relative">
+                <FileText size={18} className="absolute left-3 top-3 text-gray-400" />
+                <input 
+                    name="cpfCnpj"
+                    className="w-full border border-gray-300 rounded-lg pl-10 p-2.5 outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="000.000.000-00"
+                    value={formData.cpfCnpj}
+                    onChange={handleChange}
+                    required
+                />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
             <div className="relative">

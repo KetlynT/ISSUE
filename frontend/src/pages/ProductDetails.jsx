@@ -18,6 +18,7 @@ export const ProductDetails = () => {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [purchaseEnabled, setPurchaseEnabled] = useState(true);
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = AuthService.isAuthenticated() && user.role === 'Admin';
@@ -31,8 +32,13 @@ export const ProductDetails = () => {
         ]);
         setProduct(prod);
         setImgSrc(prod.imageUrl);
-        if (settings && settings.whatsapp_number) {
-            setWhatsappNumber(settings.whatsapp_number);
+        if (settings) {
+            if (settings.whatsapp_number) {
+                setWhatsappNumber(settings.whatsapp_number);
+            }
+            if (settings.purchase_enabled === 'false') {
+                setPurchaseEnabled(false);
+            }
         }
       } catch (error) {
         console.error("Erro ao carregar dados", error);
@@ -72,7 +78,6 @@ export const ProductDetails = () => {
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden md:flex">
         
-        {/* Coluna Esquerda: Imagem */}
         <div className="md:w-1/2 h-96 md:h-auto bg-gray-100 relative group">
           <img 
             src={imgSrc} 
@@ -82,13 +87,10 @@ export const ProductDetails = () => {
           />
         </div>
 
-        {/* Coluna Direita: Detalhes e Ações */}
         <div className="md:w-1/2 p-8 flex flex-col">
           <div className="mb-auto">
-            {/* Link de voltar: text-primary */}
             <Link to="/" className="text-primary hover:underline text-sm mb-4 block">← Voltar para o catálogo</Link>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
-            {/* Preço: text-primary */}
             <div className="text-3xl font-bold text-primary mb-6">{formattedPrice} <span className="text-sm text-gray-400 font-normal">/ unidade</span></div>
             
             <p className="text-gray-500 mb-8 leading-relaxed whitespace-pre-line border-b pb-6">
@@ -96,7 +98,7 @@ export const ProductDetails = () => {
             </p>
 
             <div className="flex flex-col gap-4 mb-8">
-                {!isAdmin && (
+                {!isAdmin && purchaseEnabled && (
                     <div className="flex items-center gap-4">
                         <div className="flex items-center border border-gray-300 rounded-lg">
                             <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="p-3 text-gray-600 hover:bg-gray-100"><Minus size={16} /></button>
@@ -109,15 +111,19 @@ export const ProductDetails = () => {
                     </div>
                 )}
 
+                {!purchaseEnabled && (
+                    <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-center mb-4 border border-blue-200">
+                        <strong>Modo Orçamento:</strong> As compras diretas estão temporariamente pausadas. Utilize o botão abaixo para solicitar um orçamento personalizado.
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {!isAdmin && (
+                    {!isAdmin && purchaseEnabled && (
                         <>
-                            {/* Botão Adicionar: Outline dinâmica */}
                             <Button onClick={handleAddToCart} disabled={product.stockQuantity < 1} variant="outline" className="text-primary border-primary hover:bg-primary/5">
                                 <ShoppingCart size={20}/> Adicionar
                             </Button>
                             
-                            {/* Botão Comprar: Sombra dinâmica */}
                             <Button onClick={handleBuyNow} disabled={product.stockQuantity < 1} className="w-full py-3 text-base shadow-primary/30">
                                 <Zap size={20}/> Comprar Agora
                             </Button>
@@ -126,17 +132,19 @@ export const ProductDetails = () => {
                     
                     <button 
                         onClick={handleCustomQuote}
-                        className={`w-full border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${isAdmin ? 'col-span-2' : 'col-span-2'}`}
+                        className={`w-full border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${(!purchaseEnabled || isAdmin) ? 'col-span-2' : ''}`}
                     >
                         <MessageSquare size={20}/> Orçamento Personalizado
                     </button>
                 </div>
             </div>
 
-            <ShippingCalculator 
-                productId={product.id} 
-                className="bg-gray-50 border border-gray-200"
-            />
+            {purchaseEnabled && (
+                <ShippingCalculator 
+                    productId={product.id} 
+                    className="bg-gray-50 border border-gray-200"
+                />
+            )}
           </div>
         </div>
       </div>

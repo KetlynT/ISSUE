@@ -25,7 +25,7 @@ export const AdminDashboard = () => {
   
   useEffect(() => {
     if (user && user.role !== 'Admin') {
-      navigate('/'); // Manda de volta para a Home
+      navigate('/'); 
       toast.error("Acesso não autorizado.");
     }
   }, [user, navigate]);
@@ -83,7 +83,6 @@ export const AdminDashboard = () => {
   );
 };
 
-// Componentes Auxiliares
 const TabButton = ({ active, onClick, children, icon }) => (
     <button 
         onClick={onClick}
@@ -107,7 +106,6 @@ const InputGroup = ({ label, name, value, onChange, type = "text", placeholder }
     </div>
 );
 
-// --- ABA: VISÃO GERAL (Atualizada com Reembolso) ---
 const OverviewTab = () => {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -167,20 +165,17 @@ const OverviewTab = () => {
     );
 };
 
-// --- ABA: PRODUTOS (Com Filtro e Ordenação) ---
 const ProductsTab = () => {
   const [products, setProducts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const pageSize = 10; // Reduzi para 10 para testar a paginação, mas pode ser 20 ou 50
+  const pageSize = 10;
   
-  // Estado para filtros
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Formulário
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState('');
@@ -198,12 +193,9 @@ const ProductsTab = () => {
   const loadProducts = async () => {
     try {
         setLoading(true);
-        // Passa currentPage e pageSize dinâmicos
         const data = await ProductService.getAll(currentPage, pageSize, searchTerm, sortConfig.key, sortConfig.direction);
 
         setProducts(data.items);
-        // Calcula o total de páginas baseado no total de itens
-        // Nota: Se o backend retornar 'totalPages' direto, use data.totalPages
         const total = Math.ceil(data.totalCount / pageSize); 
         setTotalPages(total || 1); 
     } catch (e) { 
@@ -221,7 +213,6 @@ const ProductsTab = () => {
       setSortConfig({ key, direction });
   };
 
-  // Ícone de ordenação
   const SortIcon = ({ column }) => {
       if (sortConfig.key !== column) return <ArrowUpDown size={14} className="text-gray-300 ml-1 inline" />;
       return sortConfig.direction === 'asc' 
@@ -295,14 +286,9 @@ const ProductsTab = () => {
 
   const handlePriceChange = (e) => {
     let val = e.target.value;
-
-    // Permite apenas números, ponto e vírgula
     val = val.replace(/[^0-9.,]/g, '');
-
-    // Garante que só existe uma vírgula ou ponto decimal
     const parts = val.split(/[,.]/);
     if (parts.length > 2) return; 
-
     setPrice(val);
   };
 
@@ -363,31 +349,29 @@ const ProductsTab = () => {
                       ))}
                   </tbody>
               </table>
-              {/* Paginação */}
-<div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
-    <span className="text-sm text-gray-500">
-        Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-    </span>
-    <div className="flex gap-2">
-        <button 
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="px-3 py-1 border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-gray-600"
-        >
-            Anterior
-        </button>
-        <button 
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="px-3 py-1 border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-gray-600"
-        >
-            Próxima
-        </button>
-    </div>
-</div>
+            <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-gray-50">
+                <span className="text-sm text-gray-500">
+                    Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
+                </span>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-gray-600"
+                    >
+                        Anterior
+                    </button>
+                    <button 
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 border rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium text-gray-600"
+                    >
+                        Próxima
+                    </button>
+                </div>
+            </div>
           </div>
 
-          {/* Modal de Produto (Omitido para não repetir código, mantém o mesmo) */}
           {isModalOpen && (
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-10">
                   <form onSubmit={handleSave} className="bg-white p-8 rounded-xl w-full max-w-2xl space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200 my-auto">
@@ -403,16 +387,16 @@ const ProductsTab = () => {
                             <textarea className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none" value={desc} onChange={e=>setDesc(e.target.value)} />
                         </div>
                         <div>
-    <label className="block text-sm font-bold text-gray-700 mb-1">Preço (R$)</label>
-    <input 
-        className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-        type="text" // Mudamos para text para aceitar vírgula visualmente
-        placeholder="0,00"
-        value={price} 
-        onChange={handlePriceChange} // Nova função
-        required 
-    />
-</div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Preço (R$)</label>
+                            <input 
+                                className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                                type="text" 
+                                placeholder="0,00"
+                                value={price} 
+                                onChange={handlePriceChange} 
+                                required 
+                            />
+                        </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1">Estoque</label>
                             <input className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" type="number" value={stock} onChange={e=>setStock(e.target.value)} required />
@@ -444,7 +428,6 @@ const ProductsTab = () => {
   );
 };
 
-// --- ABA: PEDIDOS (Correção de Alinhamento) ---
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);
     const [filteredOrders, setFilteredOrders] = useState([]);
@@ -835,8 +818,6 @@ const SettingsTab = () => {
 
             await ContentService.saveSettings(updatedData);
             
-            // Opcional: Recarregar a página para aplicar as novas cores imediatamente ao Admin também
-            // window.location.reload(); 
             toast.success("Configurações atualizadas!");
         } catch (e) {
             toast.error("Erro ao salvar configurações.");
@@ -848,7 +829,28 @@ const SettingsTab = () => {
     return (
         <form onSubmit={handleSave} className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-4xl mx-auto space-y-8">
             
-            {/* Seção de Identidade e Contato */}
+            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
+                <h3 className="font-bold text-lg text-yellow-800 border-b border-yellow-200 pb-2 mb-4">Controle da Loja</h3>
+                <div className="flex items-center gap-4">
+                    <label className="flex items-center cursor-pointer relative">
+                        <input 
+                            type="checkbox" 
+                            name="purchase_enabled" 
+                            checked={formData.purchase_enabled !== 'false'} 
+                            onChange={e => setFormData({...formData, purchase_enabled: e.target.checked ? 'true' : 'false'})}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <span className="ml-3 text-sm font-medium text-gray-900">
+                            {formData.purchase_enabled !== 'false' ? 'Compras e Cadastros ATIVADOS' : 'MODO SOMENTE ORÇAMENTO (Compras Desativadas)'}
+                        </span>
+                    </label>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                    Quando desativado, clientes não poderão se cadastrar, fazer login (exceto Admin), adicionar itens ao carrinho ou finalizar compras. Apenas a opção de orçamento via WhatsApp ficará visível.
+                </p>
+            </div>
+
             <div className="space-y-4">
                 <h3 className="font-bold text-lg text-gray-800 border-b pb-2">Identidade e Contato</h3>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -863,7 +865,6 @@ const SettingsTab = () => {
                 </div>
             </div>
 
-            {/* Seção Hero */}
             <div className="space-y-4">
                 <h3 className="font-bold text-lg text-gray-800 border-b pb-2">Cabeçalho (Hero)</h3>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -877,7 +878,6 @@ const SettingsTab = () => {
                 </div>
             </div>
 
-            {/* Seção Rodapé */}
             <div className="space-y-4">
                 <h3 className="font-bold text-lg text-gray-800 border-b pb-2">Rodapé</h3>
                 <div>
@@ -892,7 +892,6 @@ const SettingsTab = () => {
                 </div>
             </div>
 
-            {/* Seção de Cores */}
             <div className="space-y-4">
                 <h3 className="font-bold text-lg text-gray-800 border-b pb-2">Personalização Visual</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">

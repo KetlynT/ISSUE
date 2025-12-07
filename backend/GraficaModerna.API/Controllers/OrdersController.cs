@@ -9,17 +9,27 @@ namespace GraficaModerna.API.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public class OrdersController(IOrderService orderService) : ControllerBase
+public class OrdersController(IOrderService orderService, IContentService contentService) : ControllerBase
 {
     private readonly IOrderService _orderService = orderService;
+    private readonly IContentService _contentService = contentService;
+
+    private async Task CheckPurchaseEnabled()
+    {
+        var settings = await _contentService.GetSettingsAsync();
+        if (settings.TryGetValue("purchase_enabled", out var enabled) && enabled == "false")
+            throw new Exception("Novos pedidos estão desativados temporariamente. Entre em contato para orçamento.");
+    }
 
     [HttpPost]
     public async Task<IActionResult> Checkout([FromBody] CheckoutDto dto)
     {
         try
         {
+            await CheckPurchaseEnabled();
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usu�rio n�o autenticado." });
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
             var order = await _orderService.CreateOrderFromCartAsync(
                 userId,
@@ -40,7 +50,7 @@ public class OrdersController(IOrderService orderService) : ControllerBase
     public async Task<IActionResult> GetMyOrders()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usu�rio n�o autenticado." });
+        if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
         var orders = await _orderService.GetUserOrdersAsync(userId);
         return Ok(orders);
@@ -60,7 +70,7 @@ public class OrdersController(IOrderService orderService) : ControllerBase
         try
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usu�rio n�o autenticado." });
+            if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
             await _orderService.RequestRefundAsync(id, userId);
             return Ok();

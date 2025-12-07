@@ -8,34 +8,51 @@ namespace GraficaModerna.API.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [EnableRateLimiting("ShippingPolicy")]
-
 public class ShippingController(
     IEnumerable<IShippingService> shippingServices,
     IProductService productService,
+    IContentService contentService,
     ILogger<ShippingController> logger) : ControllerBase
 {
     private const int MaxItemsPerCalculation = 50;
     private readonly ILogger<ShippingController> _logger = logger;
     private readonly IProductService _productService = productService;
     private readonly IEnumerable<IShippingService> _shippingServices = shippingServices;
+    private readonly IContentService _contentService = contentService;
+
+    private async Task CheckPurchaseEnabled()
+    {
+        var settings = await _contentService.GetSettingsAsync();
+        if (settings.TryGetValue("purchase_enabled", out var enabled) && enabled == "false")
+            throw new Exception("Cálculo de frete temporariamente indisponível. Utilize o orçamento personalizado.");
+    }
 
     [HttpPost("calculate")]
     public async Task<ActionResult<List<ShippingOptionDto>>> Calculate([FromBody] CalculateShippingRequest request)
     {
+        try
+        {
+            await CheckPurchaseEnabled();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         if (request == null || string.IsNullOrWhiteSpace(request.DestinationCep))
-            return BadRequest(new { message = "CEP de destino inv�lido." });
+            return BadRequest(new { message = "CEP de destino inválido." });
 
         var cleanCep = new string([.. request.DestinationCep.Where(char.IsDigit)]);
 
         if (cleanCep.Length != 8)
-            return BadRequest(new { message = "CEP inv�lido. Certifique-se de informar os 8 d�gitos num�ricos." });
+            return BadRequest(new { message = "CEP inválido. Certifique-se de informar os 8 dígitos numéricos." });
 
         if (request.Items == null || request.Items.Count == 0)
-            return BadRequest(new { message = "Nenhum item informado para c�lculo." });
+            return BadRequest(new { message = "Nenhum item informado para cálculo." });
 
         if (request.Items.Count > MaxItemsPerCalculation)
             return BadRequest(new
-                { message = $"O c�lculo � limitado a {MaxItemsPerCalculation} itens distintos por vez." });
+                { message = $"O cálculo é limitado a {MaxItemsPerCalculation} itens distintos por vez." });
 
         List<ShippingItemDto> validatedItems = [];
 
@@ -43,13 +60,13 @@ public class ShippingController(
         {
             if (item.Quantity <= 0)
                 return BadRequest(new
-                    { message = $"Item {item.ProductId} possui quantidade inv�lida ({item.Quantity})." });
+                    { message = $"Item {item.ProductId} possui quantidade inválida ({item.Quantity})." });
 
             if (item.Quantity > 1000)
                 return BadRequest(new
                 {
                     message =
-                        $"Quantidade excessiva para o item {item.ProductId}. Entre em contato para cota��o de atacado."
+                        $"Quantidade excessiva para o item {item.ProductId}. Entre em contato para cotação de atacado."
                 });
 
             if (item.ProductId != Guid.Empty)
@@ -69,7 +86,7 @@ public class ShippingController(
         }
 
         if (validatedItems.Count == 0)
-            return BadRequest(new { message = "Nenhum produto v�lido encontrado para c�lculo." });
+            return BadRequest(new { message = "Nenhum produto válido encontrado para cálculo." });
 
         List<ShippingOptionDto> allOptions = [];
 
@@ -84,27 +101,36 @@ public class ShippingController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro cr�tico ao calcular frete para CEP {Cep}", cleanCep);
+            _logger.LogError(ex, "Erro crítico ao calcular frete para CEP {Cep}", cleanCep);
             return StatusCode(500,
-                new { message = "N�o foi poss�vel calcular o frete no momento. Tente novamente mais tarde." });
+                new { message = "Não foi possível calcular o frete no momento. Tente novamente mais tarde." });
         }
     }
 
     [HttpGet("product/{productId}/{cep}")]
     public async Task<ActionResult<List<ShippingOptionDto>>> CalculateForProduct(Guid productId, string cep)
     {
+        try
+        {
+            await CheckPurchaseEnabled();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         if (string.IsNullOrWhiteSpace(cep))
-            return BadRequest(new { message = "CEP inv�lido." });
+            return BadRequest(new { message = "CEP inválido." });
 
         var cleanCep = new string([.. cep.Where(char.IsDigit)]);
 
         if (cleanCep.Length != 8)
-            return BadRequest(new { message = "CEP inv�lido. Informe apenas os 8 d�gitos." });
+            return BadRequest(new { message = "CEP inválido. Informe apenas os 8 dígitos." });
 
         try
         {
             var product = await _productService.GetByIdAsync(productId);
-            if (product == null) return NotFound(new { message = "Produto n�o encontrado." });
+            if (product == null) return NotFound(new { message = "Produto não encontrado." });
 
             var item = new ShippingItemDto
             {
@@ -127,9 +153,9 @@ public class ShippingController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao calcular frete �nico para Produto {ProductId} e CEP {Cep}", productId,
+            _logger.LogError(ex, "Erro ao calcular frete único para Produto {ProductId} e CEP {Cep}", productId,
                 cleanCep);
-            return StatusCode(500, new { message = "Servi�o de c�lculo de frete indispon�vel temporariamente." });
+            return StatusCode(500, new { message = "Serviço de cálculo de frete indisponível temporariamente." });
         }
     }
 }
