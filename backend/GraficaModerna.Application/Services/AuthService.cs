@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
+using GraficaModerna.Application.Validators;
 using GraficaModerna.Domain.Constants;
 using GraficaModerna.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
@@ -19,7 +20,7 @@ public class AuthService(
     IPasswordHasher<ApplicationUser> passwordHasher) : IAuthService
 {
     private readonly IConfiguration _configuration = configuration;
-    private readonly IPasswordHasher<ApplicationUser> _passwordHasher = passwordHasher; 
+    private readonly IPasswordHasher<ApplicationUser> _passwordHasher = passwordHasher;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly IContentService _contentService = contentService;
 
@@ -86,7 +87,7 @@ public class AuthService(
         if (!await _userManager.CheckPasswordAsync(user, dto.Password))
         {
             await _userManager.AccessFailedAsync(user);
-            
+
             if (await _userManager.IsLockedOutAsync(user))
                 throw new Exception("Muitas tentativas falhas. Conta bloqueada temporariamente.");
 
@@ -108,7 +109,7 @@ public class AuthService(
             if (isAdmin)
                 throw new Exception("Administradores devem acessar exclusivamente pelo Painel Administrativo.");
         }
-        
+
         if (!isAdmin)
         {
             await CheckPurchaseEnabled();
@@ -134,7 +135,7 @@ public class AuthService(
 
         if (user == null || user.RefreshToken == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             throw new Exception("Refresh token inválido ou expirado.");
-        
+
         if (await _userManager.IsLockedOutAsync(user))
             throw new Exception("Conta bloqueada temporariamente.");
 
@@ -154,6 +155,11 @@ public class AuthService(
 
     public async Task UpdateProfileAsync(string userId, UpdateProfileDto dto)
     {
+        if (!DocumentValidator.IsValid(dto.CpfCnpj))
+        {
+            throw new Exception("O documento informado (CPF ou CNPJ) é inválido.");
+        }
+
         var user = await _userManager.FindByIdAsync(userId) ?? throw new Exception("Usuário não encontrado.");
         user.FullName = dto.FullName;
         user.PhoneNumber = dto.PhoneNumber;
@@ -168,7 +174,7 @@ public class AuthService(
         var accessToken = GenerateAccessToken(user);
         var refreshToken = GenerateRefreshToken();
 
-        user.RefreshToken = _passwordHasher.HashPassword(user, refreshToken); 
+        user.RefreshToken = _passwordHasher.HashPassword(user, refreshToken);
         user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
         await _userManager.UpdateAsync(user);
 
@@ -186,11 +192,11 @@ public class AuthService(
 
         var authClaims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub, user.Id), 
+            new(JwtRegisteredClaimNames.Sub, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email!),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("role", primaryRole),                 
-            new(JwtRegisteredClaimNames.UniqueName, user.UserName!) 
+            new("role", primaryRole),
+            new(JwtRegisteredClaimNames.UniqueName, user.UserName!)
         };
 
         var keyString = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? _configuration["Jwt:Key"];
@@ -200,12 +206,12 @@ public class AuthService(
         return new JwtSecurityToken(
             _configuration["Jwt:Issuer"],
             _configuration["Jwt:Audience"],
-            expires: DateTime.UtcNow.AddMinutes(15), 
+            expires: DateTime.UtcNow.AddMinutes(15),
             claims: authClaims,
             signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
         );
     }
-    
+
     private static string GenerateRefreshToken()
     {
         var randomNumber = new byte[64];
@@ -219,11 +225,11 @@ public class AuthService(
         var keyString = Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? _configuration["Jwt:Key"];
         var tokenValidationParameters = new TokenValidationParameters
         {
-            ValidateAudience = false, 
+            ValidateAudience = false,
             ValidateIssuer = false,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString!)),
-            ValidateLifetime = false 
+            ValidateLifetime = false
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
