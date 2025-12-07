@@ -1,26 +1,32 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import authService from '../services/authService';
+import api from '../services/api';
 
 const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // Objeto do utilizador
-  const [loading, setLoading] = useState(true); // Para não mostrar a tela antes de checar auth
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Ao iniciar a App, pergunta ao backend se estamos logados
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            setUser(null);
+            setLoading(false);
+            return;
+        }
         const status = await authService.checkAuth();
         if (status.isAuthenticated) {
-          // Se o cookie for válido, buscamos os detalhes do perfil
           const userProfile = await authService.getProfile();
-          // Combinamos a role do checkAuth com os dados do perfil
           setUser({ ...userProfile, role: status.role });
         } else {
+          localStorage.removeItem('access_token');
           setUser(null);
         }
       } catch (error) {
+        localStorage.removeItem('access_token');
         setUser(null);
       } finally {
         setLoading(false);
@@ -32,8 +38,9 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     const data = await authService.login(credentials);
-    // Após login sucesso, buscamos o perfil completo para garantir estado atualizado
-    // O backend já retornou role e email, mas podemos querer o UserID ou Nome
+    if (data.token) {
+        localStorage.setItem('access_token', data.token);
+    }
     const userProfile = await authService.getProfile(); 
     setUser({ ...userProfile, role: data.role });
     return data;
@@ -41,6 +48,9 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     const data = await authService.register(userData);
+    if (data.token) {
+        localStorage.setItem('access_token', data.token);
+    }
     const userProfile = await authService.getProfile();
     setUser({ ...userProfile, role: data.role });
     return data;
@@ -49,9 +59,11 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await authService.logout();
+    } catch (e) {
+      console.error(e);
     } finally {
+      localStorage.removeItem('access_token');
       setUser(null);
-      // Opcional: window.location.href = '/login'; para forçar refresh total
     }
   };
 
@@ -62,7 +74,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Hook personalizado para facilitar o uso
 export const useAuth = () => useContext(AuthContext);
-
 export default AuthContext;
