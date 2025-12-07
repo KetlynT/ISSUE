@@ -21,8 +21,8 @@ public class StripePaymentService : IPaymentService
 
         if (string.IsNullOrEmpty(apiKey))
         {
-            _logger.LogCritical("STRIPE_SECRET_KEY n�o encontrada.");
-            throw new Exception("Erro de configura��o no servidor de pagamentos.");
+            _logger.LogCritical("STRIPE_SECRET_KEY não encontrada.");
+            throw new Exception("Erro de configuração no servidor de pagamentos.");
         }
 
         StripeConfiguration.ApiKey = apiKey;
@@ -46,11 +46,11 @@ public class StripePaymentService : IPaymentService
                 Mode = "payment",
                 SuccessUrl = successUrl,
                 CancelUrl = cancelUrl,
+                // Correção: Removemos dados sensíveis/incorretos (user_email, expected_amount)
+                // Mantemos apenas o order_id para reconciliação no Webhook.
                 Metadata = new Dictionary<string, string>
                 {
-                    { "order_id", order.Id.ToString() },
-                    { "user_email", order.UserId },
-                    { "expected_amount", order.TotalAmount.ToString("F2") }
+                    { "order_id", order.Id.ToString() }
                 },
                 LineItems = []
             };
@@ -118,18 +118,17 @@ public class StripePaymentService : IPaymentService
         }
         catch (StripeException stripeEx)
         {
-
             var requestId = stripeEx.StripeResponse?.RequestId ?? "N/A";
 
             _logger.LogError(stripeEx,
-                "Erro Stripe ao criar sess�o. OrderId: {OrderId}, StripeCode: {StripeCode}, RequestId: {RequestId}",
+                "Erro Stripe ao criar sessão. OrderId: {OrderId}, StripeCode: {StripeCode}, RequestId: {RequestId}",
                 order.Id, stripeEx.StripeError?.Code, requestId);
 
-            throw new Exception("Falha na comunica��o com o provedor de pagamentos. Tente novamente.");
+            throw new Exception("Falha na comunicação com o provedor de pagamentos. Tente novamente.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro gen�rico ao criar sess�o de pagamento. OrderId: {OrderId}", order.Id);
+            _logger.LogError(ex, "Erro genérico ao criar sessão de pagamento. OrderId: {OrderId}", order.Id);
             throw new Exception("Erro ao processar o pagamento.");
         }
     }
@@ -137,7 +136,7 @@ public class StripePaymentService : IPaymentService
     public async Task RefundPaymentAsync(string paymentIntentId)
     {
         if (string.IsNullOrEmpty(paymentIntentId))
-            throw new ArgumentException("ID da transa��o inv�lido.");
+            throw new ArgumentException("ID da transação inválido.");
 
         try
         {
@@ -156,11 +155,11 @@ public class StripePaymentService : IPaymentService
                 "Erro Stripe ao processar reembolso. PaymentIntent: {PaymentIntent}, Code: {Code}",
                 paymentIntentId, stripeEx.StripeError?.Code);
 
-            throw new Exception("N�o foi poss�vel processar o reembolso autom�tico no provedor de pagamentos.");
+            throw new Exception("Não foi possível processar o reembolso automático no provedor de pagamentos.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro gen�rico ao processar reembolso. PaymentIntent: {PaymentIntent}",
+            _logger.LogError(ex, "Erro genérico ao processar reembolso. PaymentIntent: {PaymentIntent}",
                 paymentIntentId);
             throw new Exception("Erro ao processar reembolso.");
         }

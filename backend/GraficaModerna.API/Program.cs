@@ -287,16 +287,26 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-var allowedOrigins = builder.Configuration.GetSection("CorsOrigins").Get<string[]>()
-                     ?? ["http://localhost:5173", "https://localhost:5173", "http://localhost:3000"];
+var allowedOrigins = builder.Configuration.GetSection("CorsOrigins").Get<string[]>();
+
+if (builder.Environment.IsDevelopment())
+{
+    allowedOrigins ??= ["http://localhost:5173", "https://localhost:5173", "http://localhost:3000"];
+}
+else
+{
+    allowedOrigins ??= []; 
+}
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", b => b
-        .WithOrigins(allowedOrigins)
-        .AllowAnyHeader()
+    options.AddPolicy("CorsPolicy", policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
         .AllowAnyMethod()
-        .AllowCredentials());
+        .AllowAnyHeader()
+        .AllowCredentials();
+    });
 });
 
 var app = builder.Build();

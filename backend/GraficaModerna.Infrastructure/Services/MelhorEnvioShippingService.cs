@@ -29,114 +29,114 @@ public class MelhorEnvioShippingService(
 
     public async Task<List<ShippingOptionDto>> CalculateAsync(string destinationCep, List<ShippingItemDto> items)
     {
-        var token = Environment.GetEnvironmentVariable("MELHOR_ENVIO_TOKEN");
+    var token = Environment.GetEnvironmentVariable("MELHOR_ENVIO_TOKEN");
 
-        if (string.IsNullOrEmpty(token) && _env.IsDevelopment()) token = _configuration["MelhorEnvio:Token"];
+    if (string.IsNullOrEmpty(token) && _env.IsDevelopment()) token = _configuration["MelhorEnvio:Token"];
 
-        if (string.IsNullOrEmpty(token))
-        {
-            _logger.LogWarning("Melhor Envio: Token n�o configurado. C�lculo ignorado.");
-            return [];
-        }
-
-        if (items == null || items.Count == 0) return [];
-
-        var originCep = "01001000";
-        try
-        {
-            var originCepSetting = await _context.SiteSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Key == "sender_cep");
-
-            if (!string.IsNullOrEmpty(originCepSetting?.Value))
-                originCep = originCepSetting.Value.Replace("-", "").Trim();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Erro ao buscar CEP de origem no banco. Usando fallback.");
-        }
-
-        var requestPayload = new
-        {
-            from = new { postal_code = originCep },
-            to = new { postal_code = destinationCep.Replace("-", "").Trim() },
-            products = items.Select(i => new
-            {
-                width = i.Width,
-                height = i.Height,
-                length = i.Length,
-                weight = i.Weight,
-                insurance_value = 0,
-                quantity = i.Quantity
-            }).ToList()
-        };
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient("MelhorEnvio");
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, "me/shipment/calculate");
-
-            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            var userAgent = _configuration["MelhorEnvio:UserAgent"] ?? "GraficaModernaAPI/1.0";
-            requestMessage.Headers.TryAddWithoutValidation("User-Agent", userAgent);
-
-            var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-            var jsonContent = JsonSerializer.Serialize(requestPayload, jsonOptions);
-            requestMessage.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            var response = await client.SendAsync(requestMessage);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                _logger.LogError("Erro API Melhor Envio ({StatusCode}): {Body}", response.StatusCode, errorBody);
-                return [];
-            }
-
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var meOptions = JsonSerializer.Deserialize<List<MelhorEnvioResponse>>(responseBody, jsonOptions);
-
-            if (meOptions == null) return [];
-
-            var validOptions = meOptions
-                .Where(x => string.IsNullOrEmpty(x.Error))
-                .Select(x =>
-                {
-                    decimal price = 0;
-                    if (decimal.TryParse(x.Price, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedPrice))
-                        price = parsedPrice;
-                    else if (decimal.TryParse(x.CustomPrice, NumberStyles.Any, CultureInfo.InvariantCulture,
-                                 out var parsedCustomPrice)) price = parsedCustomPrice;
-
-                    return new ShippingOptionDto
-                    {
-                        Name = $"{x.Company?.Name} - {x.Name}",
-                        Price = price,
-
-                        DeliveryDays = x.DeliveryRange?.Max ?? x.DeliveryTime,
-                        Provider = "Melhor Envio"
-                    };
-                })
-                .Where(x => x.Price > 0)
-                .OrderBy(x => x.Price)
-                .ToList();
-
-            return validOptions;
-        }
-        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-        {
-            _logger.LogError("Timeout na comunica��o com Melhor Envio.");
-            return [];
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Erro cr�tico ao calcular frete Melhor Envio.");
-            return [];
-        }
+    if (string.IsNullOrEmpty(token))
+    {
+        _logger.LogWarning("Melhor Envio: Token não configurado. Cálculo ignorado.");
+        return [];
     }
 
+    if (items == null || items.Count == 0) return [];
+
+    var originCep = "01001000";
+    try
+    {
+        var originCepSetting = await _context.SiteSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Key == "sender_cep");
+
+        if (!string.IsNullOrEmpty(originCepSetting?.Value))
+            originCep = originCepSetting.Value.Replace("-", "").Trim();
+    }
+    catch (Exception ex)
+    {
+        _logger.LogWarning(ex, "Erro ao buscar CEP de origem no banco. Usando fallback.");
+    }
+
+    var requestPayload = new
+    {
+        from = new { postal_code = originCep },
+        to = new { postal_code = destinationCep.Replace("-", "").Trim() },
+        products = items.Select(i => new
+        {
+            width = i.Width,
+            height = i.Height,
+            length = i.Length,
+            weight = i.Weight,
+            insurance_value = 0,
+            quantity = i.Quantity
+        }).ToList()
+    };
+
+    try
+    {
+        var client = _httpClientFactory.CreateClient("MelhorEnvio");
+        var requestMessage = new HttpRequestMessage(HttpMethod.Post, "me/shipment/calculate");
+
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        requestMessage.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        var userAgent = _configuration["MelhorEnvio:UserAgent"] ?? "GraficaModernaAPI/1.0";
+        requestMessage.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+
+        var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var jsonContent = JsonSerializer.Serialize(requestPayload, jsonOptions);
+        requestMessage.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        
+        var response = await client.SendAsync(requestMessage, cts.Token);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cts.Token);
+            _logger.LogError("Erro API Melhor Envio ({StatusCode}): {Body}", response.StatusCode, errorBody);
+            return [];
+        }
+
+        var responseBody = await response.Content.ReadAsStringAsync(cts.Token);
+        var meOptions = JsonSerializer.Deserialize<List<MelhorEnvioResponse>>(responseBody, jsonOptions);
+
+        if (meOptions == null) return [];
+
+        var validOptions = meOptions
+            .Where(x => string.IsNullOrEmpty(x.Error))
+            .Select(x =>
+            {
+                decimal price = 0;
+                if (decimal.TryParse(x.Price, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedPrice))
+                    price = parsedPrice;
+                else if (decimal.TryParse(x.CustomPrice, NumberStyles.Any, CultureInfo.InvariantCulture,
+                             out var parsedCustomPrice)) price = parsedCustomPrice;
+
+                return new ShippingOptionDto
+                {
+                    Name = $"{x.Company?.Name} - {x.Name}",
+                    Price = price,
+                    DeliveryDays = x.DeliveryRange?.Max ?? x.DeliveryTime,
+                    Provider = "Melhor Envio"
+                };
+            })
+            .Where(x => x.Price > 0)
+            .OrderBy(x => x.Price)
+            .ToList();
+
+        return validOptions;
+    }
+    catch (OperationCanceledException)
+    {
+        _logger.LogError("Timeout na comunicação com Melhor Envio.");
+        return [];
+    }
+    catch (Exception ex)
+        {
+        _logger.LogError(ex, "Erro crítico ao calcular frete Melhor Envio.");
+        return [];
+        }
+    }
     private class MelhorEnvioResponse
     {
         [JsonPropertyName("name")] public string? Name { get; set; }

@@ -11,7 +11,7 @@ namespace GraficaModerna.API.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-[EnableRateLimiting("StrictPaymentPolicy")] 
+[EnableRateLimiting("StrictPaymentPolicy")]
 public class PaymentsController(
     IPaymentService paymentService,
     IContentService contentService,
@@ -53,9 +53,7 @@ public class PaymentsController(
 
         if (order == null)
         {
-            logger.LogWarning(
-                "Tentativa de acesso não autorizado ou pedido inexistente. OrderId: {OrderId}, UserId: {UserId}",
-                orderId, userId);
+            logger.LogWarning("Tentativa de acesso não autorizado ou pedido inexistente.");
             return NotFound("Pedido não encontrado ou você não tem permissão para acessá-lo.");
         }
 

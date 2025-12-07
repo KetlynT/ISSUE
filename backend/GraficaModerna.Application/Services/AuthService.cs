@@ -83,18 +83,16 @@ public class AuthService(
         {
             if (!isAdmin)
                 throw new Exception("Acesso não autorizado para contas de cliente.");
-            }
+        }
         else
         {
             if (isAdmin)
                 throw new Exception("Administradores devem acessar exclusivamente pelo Painel Administrativo.");
-            }
-        
+        }
         if (!isAdmin)
         {
             await CheckPurchaseEnabled();
         }
-
         return await CreateTokenPairAsync(user);
     }
 

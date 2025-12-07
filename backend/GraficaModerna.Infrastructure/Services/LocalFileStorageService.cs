@@ -8,13 +8,12 @@ namespace GraficaModerna.Infrastructure.Services;
 public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccessor httpContextAccessor)
     : IFileStorageService
 {
-
     private static readonly Dictionary<string, List<byte[]>> _fileSignatures = new()
     {
-        { ".jpeg", new List<byte[]> { new byte[] { 0xFF, 0xD8, 0xFF } } },
-        { ".jpg", new List<byte[]> { new byte[] { 0xFF, 0xD8, 0xFF } } },
-        { ".png", new List<byte[]> { new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A } } },
-        { ".webp", new List<byte[]> { "RIFF"u8.ToArray(), "WEBP"u8.ToArray() } }
+        { ".jpeg", [new byte[] { 0xFF, 0xD8, 0xFF }] },
+        { ".jpg", [new byte[] { 0xFF, 0xD8, 0xFF }] },
+        { ".png", [new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }] },
+        { ".webp", ["RIFF"u8.ToArray(), "WEBP"u8.ToArray()] }
     };
 
     private readonly IWebHostEnvironment _env = env;
@@ -28,7 +27,7 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
         if (!_fileSignatures.TryGetValue(ext, out var signatures))
-            throw new Exception("Formato de arquivo n�o suportado.");
+            throw new Exception("Formato de arquivo não suportado.");
 
         var fileName = $"{Guid.NewGuid()}{ext}";
         var folderPath = Path.Combine(_env.WebRootPath, folderName);
@@ -40,7 +39,6 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
 
         try
         {
-
             using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
 
@@ -50,7 +48,7 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
                 var headerBytes = reader.ReadBytes(12);
                 if (!signatures.Any(signature =>
                         headerBytes.Take(signature.Length).SequenceEqual(signature)))
-                    throw new Exception("O arquivo est� corrompido ou a extens�o n�o corresponde ao conte�do real.");
+                    throw new Exception("O arquivo está corrompido ou a extensão não corresponde ao conteúdo real.");
             }
 
             memoryStream.Position = 0;
@@ -59,7 +57,7 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
         }
         catch (Exception ex)
         {
-            throw new Exception($"Erro de seguran�a ou E/S ao salvar arquivo: {ex.Message}");
+            throw new Exception($"Erro de segurança ou E/S ao salvar arquivo: {ex.Message}");
         }
 
         var request = _httpContextAccessor.HttpContext!.Request;
@@ -72,21 +70,24 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
 
         try
         {
-
             var uri = new Uri(fileUrl);
-            var relativePath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            var relativePath = Uri.UnescapeDataString(uri.AbsolutePath)
+                .TrimStart('/')
+                .Replace('/', Path.DirectorySeparatorChar);
 
-            var webRoot = _env.WebRootPath;
+            var webRoot = Path.GetFullPath(_env.WebRootPath);
+            if (!webRoot.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            {
+                webRoot += Path.DirectorySeparatorChar;
+            }
+
             var fullPath = Path.GetFullPath(Path.Combine(webRoot, relativePath));
 
-            var webRootFull = Path.GetFullPath(webRoot);
-            if (!fullPath.StartsWith(webRootFull, StringComparison.OrdinalIgnoreCase))
-
+            if (!fullPath.StartsWith(webRoot, StringComparison.OrdinalIgnoreCase))
                 return;
 
             if (File.Exists(fullPath))
             {
-
                 try
                 {
                     using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Write, FileShare.None);
@@ -102,7 +103,6 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
                 }
                 catch
                 {
-
                 }
 
                 File.Delete(fullPath);
@@ -110,7 +110,6 @@ public class LocalFileStorageService(IWebHostEnvironment env, IHttpContextAccess
         }
         catch
         {
-
         }
     }
 }
