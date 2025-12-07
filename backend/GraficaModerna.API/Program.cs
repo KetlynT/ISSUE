@@ -202,9 +202,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         options.Lockout.MaxFailedAccessAttempts = 5;
     })
     .AddEntityFrameworkStores<AppDbContext>()
-    .AddDefaultTokenProviders();
+    .AddDefaultTokenProviders()
+    .AddPasswordHasher<PepperedPasswordHasher>();
 
-builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PepperedPasswordHasher<ApplicationUser>>();
+builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PepperedPasswordHasher>();
 
 var key = Encoding.UTF8.GetBytes(jwtKey);
 builder.Services.AddAuthentication(options =>

@@ -28,7 +28,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             .HasMaxLength(20)
             .IsRequired(false);
 
+        // Configurações de Produto
         builder.Entity<Product>().Property(p => p.Price).HasColumnType("decimal(18,2)");
+        // Índice composto para o catálogo (filtro de ativos + ordenação/filtro por preço)
+        builder.Entity<Product>()
+            .HasIndex(p => new { p.IsActive, p.Price })
+            .HasDatabaseName("IX_Product_IsActive_Price");
+
         builder.Entity<OrderItem>().Property(i => i.UnitPrice).HasColumnType("decimal(18,2)");
         builder.Entity<Order>().Property(o => o.SubTotal).HasColumnType("decimal(18,2)");
         builder.Entity<Order>().Property(o => o.Discount).HasColumnType("decimal(18,2)");
@@ -42,7 +48,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             .ToTable(t => t.HasCheckConstraint("CK_Order_TotalAmount", 
                 $"\"TotalAmount\" >= {Order.MinOrderAmount.ToString(CultureInfo.InvariantCulture)} AND \"TotalAmount\" <= {Order.MaxOrderAmount.ToString(CultureInfo.InvariantCulture)}"));
 
+        // Índices para Orders
+        // 1. Filtros de Admin (busca por status)
+        builder.Entity<Order>()
+            .HasIndex(o => o.Status)
+            .HasDatabaseName("IX_Order_Status");
+
+        // 2. Queries de Usuário (Meus Pedidos: busca por UserId ordenado por Data)
+        builder.Entity<Order>()
+            .HasIndex(o => new { o.UserId, o.OrderDate })
+            .HasDatabaseName("IX_Order_UserId_OrderDate");
+
+        // Configurações de Coupon
         builder.Entity<Coupon>().Property(c => c.DiscountPercentage).HasColumnType("decimal(5,2)");
+        // Índice único para busca rápida e validação de código de cupom
+        builder.Entity<Coupon>()
+            .HasIndex(c => c.Code)
+            .IsUnique()
+            .HasDatabaseName("IX_Coupon_Code");
 
         builder.Entity<Order>()
             .HasMany(o => o.History)
