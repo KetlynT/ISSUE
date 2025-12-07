@@ -24,8 +24,9 @@ public class ContentController(IContentService service, IHtmlSanitizer sanitizer
     [HttpGet("settings")]
     public async Task<IActionResult> GetSettings()
     {
-        var settings = await _service.GetSettingsAsync();
-        return Ok(settings);
+        var settingsList = await _service.GetSettingsAsync();
+        var settingsDict = settingsList.ToDictionary(s => s.Key, s => s.Value);
+        return Ok(settingsDict);
     }
 
     [HttpPost("settings")]

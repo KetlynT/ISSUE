@@ -59,6 +59,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await authService.logout();
+      window.location.href = '/';
     } catch (e) {
       console.error(e);
     } finally {

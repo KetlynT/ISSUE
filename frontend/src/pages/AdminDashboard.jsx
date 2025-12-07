@@ -818,12 +818,22 @@ const SettingsTab = () => {
     const [logoFile, setLogoFile] = useState(null); 
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const data = await ContentService.getSettings();
 
-    const load = async () => {
-        const data = await ContentService.getSettings();
-        setFormData(data);
-    };
+                if (!data.purchase_enabled) {
+                    data.purchase_enabled = 'true';
+                }
+                
+                setFormData(data);
+            } catch (error) {
+                console.error("Erro ao carregar settings", error);
+            }
+        };
+        load();
+    }, []);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });

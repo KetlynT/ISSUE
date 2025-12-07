@@ -23,6 +23,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
+      localStorage.removeItem('access_token');
+      const isLoginRequest = error.config.url.includes('/login') || error.config.url.includes('/auth');
+      if (!isLoginRequest) {
+          window.location.href = '/';
+      }
       console.warn('Sessão expirada ou não autenticada.');
     }
     return Promise.reject(error);
