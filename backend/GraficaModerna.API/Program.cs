@@ -191,6 +191,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
         b => b.MigrationsAssembly("GraficaModerna.Infrastructure")));
 
+builder.Services.Configure<PepperSettings>(
+    builder.Configuration.GetSection("Security:PepperRotation"));
+
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.Password.RequireDigit = true;
@@ -202,8 +205,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         options.Lockout.MaxFailedAccessAttempts = 5;
     })
     .AddEntityFrameworkStores<AppDbContext>()
-    .AddDefaultTokenProviders()
-    .AddPasswordHasher<PepperedPasswordHasher>();
+    .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PepperedPasswordHasher>();
 
