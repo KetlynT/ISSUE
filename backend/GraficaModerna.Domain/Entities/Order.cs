@@ -2,6 +2,9 @@
 
 public class Order
 {
+    public const decimal MinOrderAmount = 1.00m;
+    public const decimal MaxOrderAmount = 100000.00m;
+
     public Guid Id { get; set; }
 
     public string UserId { get; set; } = string.Empty;

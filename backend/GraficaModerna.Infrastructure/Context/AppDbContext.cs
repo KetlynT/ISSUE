@@ -1,4 +1,5 @@
-﻿using GraficaModerna.Domain.Entities;
+﻿using System.Globalization;
+using GraficaModerna.Domain.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,21 +21,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
-        base.OnModelCreating(builder); // Importante para o Identity funcionar
+        base.OnModelCreating(builder);
 
-        // Configuração do CPF/CNPJ na tabela de Usuários
         builder.Entity<ApplicationUser>()
             .Property(u => u.CpfCnpj)
-            .HasMaxLength(20) // Tamanho suficiente para formatado (14 ou 18 chars)
-            .IsRequired(false); // Pode ser opcional no banco se admin criar sem
+            .HasMaxLength(20)
+            .IsRequired(false);
 
-        // Configurações existentes de Decimal
         builder.Entity<Product>().Property(p => p.Price).HasColumnType("decimal(18,2)");
         builder.Entity<OrderItem>().Property(i => i.UnitPrice).HasColumnType("decimal(18,2)");
         builder.Entity<Order>().Property(o => o.SubTotal).HasColumnType("decimal(18,2)");
         builder.Entity<Order>().Property(o => o.Discount).HasColumnType("decimal(18,2)");
         builder.Entity<Order>().Property(o => o.ShippingCost).HasColumnType("decimal(18,2)");
-        builder.Entity<Order>().Property(o => o.TotalAmount).HasColumnType("decimal(18,2)");
+        
+        builder.Entity<Order>()
+            .Property(o => o.TotalAmount)
+            .HasColumnType("decimal(18,2)");
+
+        builder.Entity<Order>()
+            .ToTable(t => t.HasCheckConstraint("CK_Order_TotalAmount", 
+                $"[TotalAmount] >= {Order.MinOrderAmount.ToString(CultureInfo.InvariantCulture)} AND [TotalAmount] <= {Order.MaxOrderAmount.ToString(CultureInfo.InvariantCulture)}"));
+
         builder.Entity<Coupon>().Property(c => c.DiscountPercentage).HasColumnType("decimal(5,2)");
 
         builder.Entity<Order>()

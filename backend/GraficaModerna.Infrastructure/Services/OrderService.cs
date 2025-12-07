@@ -17,8 +17,6 @@ public class OrderService(
     IEnumerable<IShippingService> shippingServices,
     IPaymentService paymentService) : IOrderService
 {
-    private const decimal MinOrderAmount = 1.00m;
-    private const decimal MaxOrderAmount = 100000.00m;
     private readonly AppDbContext _context = context;
     private readonly IEmailService _emailService = emailService;
     private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
@@ -104,11 +102,11 @@ public class OrderService(
 
             var totalAmount = subTotal - discount + verifiedShippingCost;
 
-            if (totalAmount < MinOrderAmount)
-                throw new Exception($"O valor total do pedido deve ser no mínimo {MinOrderAmount:C}.");
+            if (totalAmount < Order.MinOrderAmount)
+                throw new Exception($"O valor total do pedido deve ser no mínimo {Order.MinOrderAmount:C}.");
 
-            if (totalAmount > MaxOrderAmount)
-                throw new Exception($"O valor do pedido excede o limite de segurança de {MaxOrderAmount:C}.");
+            if (totalAmount > Order.MaxOrderAmount)
+                throw new Exception($"O valor do pedido excede o limite de segurança de {Order.MaxOrderAmount:C}.");
 
             var formattedAddress =
                 $"{addressDto.Street}, {addressDto.Number} - {addressDto.Complement} - {addressDto.Neighborhood}, " +

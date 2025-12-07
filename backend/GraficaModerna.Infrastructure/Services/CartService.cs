@@ -73,24 +73,20 @@ public class CartService(IUnitOfWork uow, AppDbContext context) : ICartService
 
                 if (existing != null)
                 {
-                    try
-                    {
-                        var newTotal = checked(existing.Quantity + dto.Quantity);
+                    long newTotal = (long)existing.Quantity + dto.Quantity;
 
-                        if (newTotal > MaxQuantityPerItem)
-                            throw new InvalidOperationException(
-                                $"O total de itens excederia o limite máximo de {MaxQuantityPerItem}.");
+                    if (newTotal > MaxQuantityPerItem)
+                        throw new InvalidOperationException(
+                            $"O total de itens excederia o limite máximo de {MaxQuantityPerItem}.");
 
-                        if (product.StockQuantity < newTotal)
-                            throw new InvalidOperationException(
-                                "Não é possível adicionar mais itens: estoque insuficiente.");
-
-                        existing.Quantity = newTotal;
-                    }
-                    catch (OverflowException)
-                    {
+                    if (newTotal > int.MaxValue)
                         throw new InvalidOperationException("Quantidade inválida (Excesso de itens).");
-                    }
+
+                    if (product.StockQuantity < newTotal)
+                        throw new InvalidOperationException(
+                            "Não é possível adicionar mais itens: estoque insuficiente.");
+
+                    existing.Quantity = (int)newTotal;
                 }
                 else
                 {

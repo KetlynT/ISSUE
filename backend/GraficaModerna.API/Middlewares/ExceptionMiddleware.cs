@@ -8,7 +8,6 @@ public class ExceptionMiddleware(
     ILogger<ExceptionMiddleware> logger,
     IHostEnvironment env)
 {
-
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -24,22 +23,27 @@ public class ExceptionMiddleware(
         {
             var traceId = context.TraceIdentifier;
 
-            logger.LogError(ex, "Um erro n�o tratado ocorreu. TraceId: {TraceId}", traceId);
+            logger.LogError(ex,
+                "Um erro não tratado ocorreu. TraceId: {TraceId}",
+                traceId);
 
             context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+
+            context.Response.StatusCode = ex switch
+            {
+                ArgumentException => (int)HttpStatusCode.BadRequest,
+                UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
+                KeyNotFoundException => (int)HttpStatusCode.NotFound,
+                _ => (int)HttpStatusCode.InternalServerError
+            };
+
+            context.Response.Headers["X-Trace-Id"] = traceId;
 
             var response = new
             {
-
-
-                context.Response.StatusCode,
-
-                Message = env.IsDevelopment()
-                    ? ex.Message
-                    : "Erro interno no servidor. Contate o suporte informando o c�digo de rastreio.",
-                StackTrace = env.IsDevelopment() ? ex.StackTrace : string.Empty,
-
+                statusCode = context.Response.StatusCode,
+                message = env.IsDevelopment() ? ex.Message : "Erro interno no servidor.",
+                stackTrace = env.IsDevelopment() ? ex.StackTrace : null,
                 traceId
             };
 
