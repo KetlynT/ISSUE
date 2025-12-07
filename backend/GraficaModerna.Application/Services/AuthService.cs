@@ -73,8 +73,27 @@ public class AuthService(
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
 
-        if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password))
+        if (user == null)
             throw new Exception("Credenciais inválidas.");
+
+        if (await _userManager.IsLockedOutAsync(user))
+        {
+            var end = await _userManager.GetLockoutEndDateAsync(user);
+            var timeLeft = end.Value - DateTimeOffset.UtcNow;
+            throw new Exception($"Conta bloqueada temporariamente. Tente novamente em {Math.Ceiling(timeLeft.TotalMinutes)} minutos.");
+        }
+
+        if (!await _userManager.CheckPasswordAsync(user, dto.Password))
+        {
+            await _userManager.AccessFailedAsync(user);
+            
+            if (await _userManager.IsLockedOutAsync(user))
+                throw new Exception("Muitas tentativas falhas. Conta bloqueada temporariamente.");
+
+            throw new Exception("Credenciais inválidas.");
+        }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
 
         var roles = await _userManager.GetRolesAsync(user);
         var isAdmin = roles.Contains(Roles.Admin);
@@ -89,10 +108,12 @@ public class AuthService(
             if (isAdmin)
                 throw new Exception("Administradores devem acessar exclusivamente pelo Painel Administrativo.");
         }
+        
         if (!isAdmin)
         {
             await CheckPurchaseEnabled();
         }
+
         return await CreateTokenPairAsync(user);
     }
 
@@ -113,6 +134,9 @@ public class AuthService(
 
         if (user == null || user.RefreshToken == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             throw new Exception("Refresh token inválido ou expirado.");
+        
+        if (await _userManager.IsLockedOutAsync(user))
+            throw new Exception("Conta bloqueada temporariamente.");
 
         var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.RefreshToken, refreshToken);
 

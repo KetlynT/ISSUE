@@ -19,16 +19,40 @@ public record AddressDto(
 );
 
 public record CreateAddressDto(
-    [Required] string Name,
-    [Required] string ReceiverName,
-    [Required] string ZipCode,
-    [Required] string Street,
-    [Required] string Number,
+    [Required(ErrorMessage = "O nome é obrigatório")] 
+    string Name,
+
+    [Required(ErrorMessage = "O nome do destinatário é obrigatório")] 
+    string ReceiverName,
+
+    [Required(ErrorMessage = "O CEP é obrigatório")]
+    [StringLength(8, MinimumLength = 8, ErrorMessage = "O CEP deve ter exatamente 8 caracteres")]
+    [RegularExpression(@"^\d{8}$", ErrorMessage = "O CEP deve conter apenas números (8 dígitos)")]
+    string ZipCode,
+
+    [Required(ErrorMessage = "A rua é obrigatória")] 
+    string Street,
+
+    [Required(ErrorMessage = "O número é obrigatório")] 
+    string Number,
+
     string? Complement,
-    [Required] string Neighborhood,
-    [Required] string City,
-    [Required] string State,
+
+    [Required(ErrorMessage = "O bairro é obrigatório")] 
+    string Neighborhood,
+
+    [Required(ErrorMessage = "A cidade é obrigatória")] 
+    string City,
+
+    [Required(ErrorMessage = "O estado é obrigatório")]
+    [StringLength(2, MinimumLength = 2, ErrorMessage = "O estado deve ser a sigla de 2 letras")]
+    string State,
+
     string? Reference,
-    [Required] string PhoneNumber,
+
+    [Required(ErrorMessage = "O telefone é obrigatório")]
+    [Phone(ErrorMessage = "Formato de telefone inválido")]
+    string PhoneNumber,
+
     bool IsDefault
 );
