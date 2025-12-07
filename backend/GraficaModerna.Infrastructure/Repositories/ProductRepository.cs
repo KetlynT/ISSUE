@@ -26,16 +26,12 @@ public class ProductRepository(AppDbContext context, ILogger<ProductRepository> 
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                // CORREÇÃO:
-                // 1. EF Core já parametriza o .Contains(), prevenindo SQL Injection.
-                // 2. Removemos .ToLower() das propriedades da entidade (Name, Description) para permitir o uso de índices (SARGable).
-                // 3. Removemos StringComparison, pois frequentemente causa falha na tradução para SQL ou avaliação no cliente.
-                // O comportamento Case-Insensitive agora depende da Collation do banco de dados (padrão na maioria).
                 var term = searchTerm.Trim();
                 
+                var termLower = term.ToLowerInvariant();
                 query = query.Where(p =>
-                    p.Name.Contains(term) ||
-                    p.Description.Contains(term));
+                    EF.Functions.ILike(p.Name, $"%{termLower}%") ||
+                    EF.Functions.ILike(p.Description, $"%{termLower}%"));
             }
 
             var totalCount = await query.CountAsync();

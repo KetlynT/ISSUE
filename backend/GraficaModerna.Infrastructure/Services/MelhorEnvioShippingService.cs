@@ -86,7 +86,7 @@ public class MelhorEnvioShippingService(
         var jsonContent = JsonSerializer.Serialize(requestPayload, jsonOptions);
         requestMessage.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         
         var response = await client.SendAsync(requestMessage, cts.Token);
 

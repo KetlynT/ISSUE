@@ -175,6 +175,16 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));
+    options.AddPolicy("StrictPaymentPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 5,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(5)
+            }));
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -343,7 +353,7 @@ app.Use(async (context, next) =>
 
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseCors("AllowFrontend");
+app.UseCors("CorsPolicy");
 
 if (!app.Environment.IsDevelopment())
 {

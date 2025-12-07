@@ -40,7 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 
         builder.Entity<Order>()
             .ToTable(t => t.HasCheckConstraint("CK_Order_TotalAmount", 
-                $"[TotalAmount] >= {Order.MinOrderAmount.ToString(CultureInfo.InvariantCulture)} AND [TotalAmount] <= {Order.MaxOrderAmount.ToString(CultureInfo.InvariantCulture)}"));
+                $"\"TotalAmount\" >= {Order.MinOrderAmount.ToString(CultureInfo.InvariantCulture)} AND \"TotalAmount\" <= {Order.MaxOrderAmount.ToString(CultureInfo.InvariantCulture)}"));
 
         builder.Entity<Coupon>().Property(c => c.DiscountPercentage).HasColumnType("decimal(5,2)");
 
