@@ -37,11 +37,16 @@ public class AuthController(
             { token = result.AccessToken, result.Email, result.Role, message = "Cadastro realizado com sucesso." });
     }
 
+    /// <summary>
+    /// Login para USUÁRIOS CLIENTES - Apenas usuários com role "User" podem fazer login aqui
+    /// </summary>
     [EnableRateLimiting("AuthPolicy")]
     [HttpPost("login")]
     public async Task<ActionResult> Login(LoginDto dto)
     {
-        var result = await _authService.LoginAsync(dto);
+        // Força IsAdminLogin = false para este endpoint
+        var userLoginDto = dto with { IsAdminLogin = false };
+        var result = await _authService.LoginAsync(userLoginDto);
 
         var settings = await _contentService.GetSettingsAsync();
         if (settings.TryGetValue("purchase_enabled", out var enabled) && enabled == "false")
@@ -55,6 +60,21 @@ public class AuthController(
 
         return Ok(new
             { token = result.AccessToken, result.Email, result.Role, message = "Login realizado com sucesso." });
+    }
+
+    /// <summary>
+    /// Login para ADMINISTRADORES - Apenas usuários com role "Admin" podem fazer login aqui
+    /// </summary>
+    [EnableRateLimiting("AuthPolicy")]
+    [HttpPost("admin/login")]
+    public async Task<ActionResult> AdminLogin(LoginDto dto)
+    {
+        // Força IsAdminLogin = true para este endpoint
+        var adminLoginDto = dto with { IsAdminLogin = true };
+        var result = await _authService.LoginAsync(adminLoginDto);
+
+        return Ok(new
+            { token = result.AccessToken, result.Email, result.Role, message = "Login administrativo realizado com sucesso." });
     }
 
     [HttpPost("logout")]

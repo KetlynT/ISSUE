@@ -16,12 +16,17 @@ export const AdminLogin = () => {
     setLoading(true);
     try {
       const data = await login({ email, password });
+      
+      // ✅ CORREÇÃO: Valida se é Admin ANTES de redirecionar
       if (data.role !== 'Admin') {
-        await logout();
-        toast.error("Acesso restrito a administradores.", { icon: <AlertTriangle className="text-red-500"/> });
+        await logout(); // Desloga imediatamente
+        toast.error("Acesso restrito a administradores.", { 
+          icon: <AlertTriangle className="text-red-500"/> 
+        });
         setLoading(false);
         return;
       }
+      
       toast.success("Bem-vindo ao Painel!");
       navigate('/putiroski/dashboard');
     } catch (err) {
@@ -35,7 +40,6 @@ export const AdminLogin = () => {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-700">
         <div className="bg-gray-800 p-8 text-center border-b border-gray-700">
-          {/* Logo/Icon com cor primária */}
           <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/50">
             <Shield size={32} className="text-white" />
           </div>
@@ -50,7 +54,6 @@ export const AdminLogin = () => {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Shield size={18} className="text-gray-500" />
                 </div>
-                {/* Focus ring com cor primária */}
                 <input 
                   type="email" 
                   className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder-gray-500"
@@ -79,7 +82,6 @@ export const AdminLogin = () => {
             </div>
           </div>
 
-          {/* Botão com cor primária */}
           <button 
             type="submit"
             disabled={loading}

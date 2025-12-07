@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom'; 
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Login = () => {
@@ -12,7 +12,7 @@ export const Login = () => {
   
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth(); 
+  const { login, logout } = useAuth(); 
   const { syncGuestCart } = useCart();
 
   const handleLogin = async (e) => {
@@ -22,11 +22,18 @@ export const Login = () => {
     try {
       const data = await login({ email, password });
       
+      // ✅ CORREÇÃO: Admin NÃO pode logar aqui
       if (data.role === 'Admin') {
-          await authService.logout();
-      } else {
-          await syncGuestCart();
+          await logout();
+          toast.error("Acesso administrativo deve ser feito pela rota /putiroski", {
+              icon: <AlertTriangle className="text-red-500" />
+          });
+          setLoading(false);
+          return;
       }
+      
+      // Sincroniza carrinho guest para usuário logado
+      await syncGuestCart();
       
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
@@ -43,7 +50,6 @@ export const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-100 p-8">
         <div className="text-center mb-8">
-            {/* Ícone com bg-primary/10 */}
             <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <LogIn size={32} className="text-primary" />
             </div>
@@ -72,7 +78,6 @@ export const Login = () => {
               required
             />
           </div>
-          {/* Botão de login com cor primária dinâmica */}
           <button 
             type="submit"
             disabled={loading}
