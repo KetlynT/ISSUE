@@ -4,7 +4,6 @@ using GraficaModerna.Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-
 namespace GraficaModerna.Infrastructure.Repositories;
 
 public class ProductRepository(AppDbContext context, ILogger<ProductRepository> logger) : IProductRepository
@@ -27,10 +26,16 @@ public class ProductRepository(AppDbContext context, ILogger<ProductRepository> 
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
-                var term = searchTerm.ToLower();
+                // CORREÇÃO:
+                // 1. EF Core já parametriza o .Contains(), prevenindo SQL Injection.
+                // 2. Removemos .ToLower() das propriedades da entidade (Name, Description) para permitir o uso de índices (SARGable).
+                // 3. Removemos StringComparison, pois frequentemente causa falha na tradução para SQL ou avaliação no cliente.
+                // O comportamento Case-Insensitive agora depende da Collation do banco de dados (padrão na maioria).
+                var term = searchTerm.Trim();
+                
                 query = query.Where(p =>
-                    p.Name.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
-                    p.Description.ToLower().Contains(term));
+                    p.Name.Contains(term) ||
+                    p.Description.Contains(term));
             }
 
             var totalCount = await query.CountAsync();
@@ -58,10 +63,8 @@ public class ProductRepository(AppDbContext context, ILogger<ProductRepository> 
         }
         catch (Exception ex)
         {
-
             _logger.LogError(ex, "Erro ao recuperar produtos. Termo: {SearchTerm}, Page: {Page}", searchTerm, page);
-
-            throw new Exception("N�o foi poss�vel recuperar a lista de produtos no momento.");
+            throw new Exception("Não foi possível recuperar a lista de produtos no momento.");
         }
     }
 
@@ -89,7 +92,6 @@ public class ProductRepository(AppDbContext context, ILogger<ProductRepository> 
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro ao criar produto: {ProductName}", product.Name);
-
             throw new Exception("Erro interno ao salvar o produto.");
         }
     }

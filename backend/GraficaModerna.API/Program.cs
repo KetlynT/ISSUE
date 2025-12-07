@@ -165,6 +165,16 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 2,
                 Window = TimeSpan.FromMinutes(1)
             }));
+    options.AddPolicy("WebhookPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 20,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>

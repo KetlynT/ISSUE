@@ -1,4 +1,5 @@
-﻿using GraficaModerna.Application.DTOs;
+﻿using System.Data;
+using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Domain.Entities;
 using GraficaModerna.Infrastructure.Context;
@@ -16,18 +17,14 @@ public class OrderService(
     IEnumerable<IShippingService> shippingServices,
     IPaymentService paymentService) : IOrderService
 {
-
-    private const decimal MinOrderAmount = 1.00m; 
-    private const decimal MaxOrderAmount = 100000.00m; 
+    private const decimal MinOrderAmount = 1.00m;
+    private const decimal MaxOrderAmount = 100000.00m;
     private readonly AppDbContext _context = context;
     private readonly IEmailService _emailService = emailService;
     private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
     private readonly IPaymentService _paymentService = paymentService;
     private readonly IEnumerable<IShippingService> _shippingServices = shippingServices;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
-
-
-
 
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode,
         string shippingMethod)
@@ -41,7 +38,7 @@ public class OrderService(
             throw new Exception("Carrinho vazio.");
 
         if (cart.Items.Any(i => i.Quantity <= 0))
-            throw new Exception("O carrinho cont�m itens com quantidades inv�lidas.");
+            throw new Exception("O carrinho contém itens com quantidades inválidas.");
 
         var shippingItems = cart.Items.Select(i => new ShippingItemDto
         {
@@ -60,10 +57,10 @@ public class OrderService(
         var selectedOption = allOptions.FirstOrDefault(o =>
                                  o.Name.Trim().Equals(shippingMethod.Trim(),
                                      StringComparison.InvariantCultureIgnoreCase)) ??
-                             throw new Exception("M�todo de envio inv�lido ou indispon�vel.");
+                             throw new Exception("Método de envio inválido ou indisponível.");
         var verifiedShippingCost = selectedOption.Price;
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         try
         {
             decimal subTotal = 0;
@@ -99,7 +96,7 @@ public class OrderService(
                 {
                     var alreadyUsed =
                         await _context.CouponUsages.AnyAsync(u => u.UserId == userId && u.CouponCode == coupon.Code);
-                    if (alreadyUsed) throw new Exception("Cupom j� utilizado.");
+                    if (alreadyUsed) throw new Exception("Cupom já utilizado.");
 
                     discount = subTotal * (coupon.DiscountPercentage / 100m);
                 }
@@ -108,10 +105,10 @@ public class OrderService(
             var totalAmount = subTotal - discount + verifiedShippingCost;
 
             if (totalAmount < MinOrderAmount)
-                throw new Exception($"O valor total do pedido deve ser no m�nimo {MinOrderAmount:C}.");
+                throw new Exception($"O valor total do pedido deve ser no mínimo {MinOrderAmount:C}.");
 
             if (totalAmount > MaxOrderAmount)
-                throw new Exception($"O valor do pedido excede o limite de seguran�a de {MaxOrderAmount:C}.");
+                throw new Exception($"O valor do pedido excede o limite de segurança de {MaxOrderAmount:C}.");
 
             var formattedAddress =
                 $"{addressDto.Street}, {addressDto.Number} - {addressDto.Complement} - {addressDto.Neighborhood}, " +
@@ -131,7 +128,6 @@ public class OrderService(
                 TotalAmount = totalAmount,
                 AppliedCoupon = couponCode?.ToUpper(),
                 Items = orderItems,
-
                 CustomerIp = GetIpAddress(),
                 UserAgent = GetUserAgent()
             };
@@ -205,19 +201,19 @@ public class OrderService(
 
         var order = await _context.Orders
             .Include(o => o.History)
-            .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido n�o encontrado");
+            .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido não encontrado");
         var auditMessage = $"Status alterado manualmente para {dto.Status}";
 
-        if (dto.Status == "Aguardando Devolu��o")
+        if (dto.Status == "Aguardando Devolução")
         {
             if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode))
                 order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
 
             order.ReturnInstructions = !string.IsNullOrEmpty(dto.ReturnInstructions)
                 ? dto.ReturnInstructions
-                : "Instru��es padr�o de devolu��o...";
+                : "Instruções padrão de devolução...";
 
-            auditMessage += ". Instru��es geradas.";
+            auditMessage += ". Instruções geradas.";
         }
 
         if (dto.Status == "Reembolsado" || dto.Status == "Cancelado")
@@ -246,17 +242,12 @@ public class OrderService(
         await _context.SaveChangesAsync();
     }
 
-
-
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId, long amountPaidInCents)
     {
-
-
         var isAlreadyProcessed = await _context.Orders
             .AnyAsync(o => o.StripePaymentIntentId == transactionId);
 
         if (isAlreadyProcessed)
-
             return;
 
         var order = await _context.Orders
@@ -265,20 +256,18 @@ public class OrderService(
 
         if (order == null) return;
 
-
         var expectedAmountInCents = (long)(order.TotalAmount * 100);
 
         if (amountPaidInCents != expectedAmountInCents)
         {
-
             AddAuditLog(order, "Fraude Suspeita",
-                $"Diverg�ncia de valor. Esperado: {expectedAmountInCents}, Recebido: {amountPaidInCents}. Transa��o: {transactionId}",
+                $"Divergência de valor. Esperado: {expectedAmountInCents}, Recebido: {amountPaidInCents}. Transação: {transactionId}",
                 "SYSTEM-SECURITY");
 
             await _context.SaveChangesAsync();
 
             throw new Exception(
-                $"FATAL: Tentativa de manipula��o de pagamento. Pedido {orderId}. Esperado {expectedAmountInCents}, Recebido {amountPaidInCents}");
+                $"FATAL: Tentativa de manipulação de pagamento. Pedido {orderId}. Esperado {expectedAmountInCents}, Recebido {amountPaidInCents}");
         }
 
         if (order.Status != "Pago")
@@ -297,13 +286,10 @@ public class OrderService(
     {
         var order = await GetUserOrderOrFail(orderId, userId);
 
-        AddAuditLog(order, "Reembolso Solicitado", "Usu�rio solicitou cancelamento pelo painel.", userId);
+        AddAuditLog(order, "Reembolso Solicitado", "Usuário solicitou cancelamento pelo painel.", userId);
 
         await _context.SaveChangesAsync();
     }
-
-
-
 
     private string GetIpAddress()
     {
@@ -315,11 +301,8 @@ public class OrderService(
         return _httpContextAccessor.HttpContext?.Request.Headers.UserAgent.ToString() ?? "Unknown";
     }
 
-
-
     private void AddAuditLog(Order order, string newStatus, string message, string changedBy)
     {
-
         order.Status = newStatus;
 
         order.History.Add(new OrderHistory
@@ -339,9 +322,9 @@ public class OrderService(
         var order = await _context.Orders
             .Include(o => o.Items)
             .Include(o => o.History) 
-            .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido n�o encontrado.");
+            .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido não encontrado.");
         if (order.UserId != userId)
-            throw new UnauthorizedAccessException("Voc� n�o tem permiss�o para acessar este pedido.");
+            throw new UnauthorizedAccessException("Você não tem permissão para acessar este pedido.");
 
         return order;
     }
@@ -353,11 +336,10 @@ public class OrderService(
             var user = await _userManager.FindByIdAsync(userId);
             if (user != null)
                 await _emailService.SendEmailAsync(user.Email!, "Pedido Recebido",
-                    $"Seu pedido #{orderId} foi recebido e est� sendo processado.");
+                    $"Seu pedido #{orderId} foi recebido e está sendo processado.");
         }
         catch
         {
-
         }
     }
 

@@ -38,7 +38,6 @@ public class StripeWebhookController : ControllerBase
         }
         else
         {
-
             _authorizedIps = []; 
             _logger.LogWarning("ALERTA: 'STRIPE_WEBHOOK' não configurado.");
         }
@@ -47,10 +46,8 @@ public class StripeWebhookController : ControllerBase
     [HttpPost("stripe")]
     public async Task<IActionResult> HandleStripeEvent()
     {
-
         if (!IsRequestFromStripe(HttpContext.Connection.RemoteIpAddress))
         {
-
             _logger.LogWarning("[Webhook] Bloqueado");
             return StatusCode(403, "Forbidden: Source Denied");
         }
@@ -70,38 +67,61 @@ public class StripeWebhookController : ControllerBase
             var signature = Request.Headers["Stripe-Signature"];
             var stripeEvent = EventUtility.ConstructEvent(json, signature, endpointSecret);
 
-            if (stripeEvent.Data.Object is Session session &&
-                session.Metadata != null &&
-                session.Metadata.TryGetValue("order_id", out var orderIdString))
+            // CORREÇÃO: Verificar explicitamente o tipo do evento
+            if (stripeEvent.Type == Events.CheckoutSessionCompleted)
             {
-                if (Guid.TryParse(orderIdString, out var orderId))
+                // A lógica de confirmação só deve ocorrer se o checkout foi completado com sucesso
+                if (stripeEvent.Data.Object is Session session &&
+                    session.Metadata != null &&
+                    session.Metadata.TryGetValue("order_id", out var orderIdString))
                 {
-                    var transactionId = session.PaymentIntentId;
-                    var amountPaid = session.AmountTotal ?? 0;
+                    if (Guid.TryParse(orderIdString, out var orderId))
+                    {
+                        var transactionId = session.PaymentIntentId;
+                        var amountPaid = session.AmountTotal ?? 0;
 
-                    _logger.LogInformation(
-                        "[Webhook] Processando pagamento para Pedido {OrderId}. Transação: {TransactionId}. Valor: {AmountPaid}",
-                        orderId, transactionId, amountPaid);
+                        _logger.LogInformation(
+                            "[Webhook] Processando pagamento para Pedido {OrderId}. Transação: {TransactionId}. Valor: {AmountPaid}",
+                            orderId, transactionId, amountPaid);
 
-                    await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
+                        await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[Webhook] Order ID inválido nos metadados: {OrderIdString}", orderIdString);
+                    }
                 }
-                else
+            }
+            // Adicionado tratamento para pagamento assíncrono com sucesso, se necessário
+            else if (stripeEvent.Type == Events.CheckoutSessionAsyncPaymentSucceeded)
+            {
+                 if (stripeEvent.Data.Object is Session session &&
+                    session.Metadata != null &&
+                    session.Metadata.TryGetValue("order_id", out var orderIdString))
                 {
-
-                    _logger.LogWarning("[Webhook] Order ID inválido nos metadados: {OrderIdString}", orderIdString);
+                     // Lógica similar para pagamentos assíncronos (ex: boletos) que compensaram depois
+                     if (Guid.TryParse(orderIdString, out var orderId))
+                    {
+                        var transactionId = session.PaymentIntentId;
+                        var amountPaid = session.AmountTotal ?? 0;
+                        await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
+                    }
                 }
             }
             else if (stripeEvent.Type == Events.PaymentIntentPaymentFailed)
-
             {
                 _logger.LogWarning("[Webhook] Pagamento falhou: {EventId}", stripeEvent.Id);
+            }
+            else
+            {
+                // Logar eventos não tratados para fins de debug (opcional)
+                _logger.LogInformation("[Webhook] Evento não tratado recebido: {EventType}", stripeEvent.Type);
             }
 
             return Ok();
         }
         catch (StripeException e)
         {
-
             _logger.LogError(e, "Erro validação Stripe.");
             return BadRequest();
         }
