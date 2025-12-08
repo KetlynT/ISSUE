@@ -1,99 +1,88 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Lock, AlertTriangle } from 'lucide-react';
+import { Lock, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const AdminLogin = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
   const navigate = useNavigate();
-  const { login, logout } = useAuth();
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const data = await login({ email, password }, true);
-      
-      if (data.role !== 'Admin') {
-        await logout();
-        toast.error("Acesso restrito a administradores.", { 
-          icon: <AlertTriangle className="text-red-500"/> 
-        });
-        setLoading(false);
-        return;
-      }
-      
-      toast.success("Bem-vindo ao Painel!");
+      // O segundo parâmetro 'true' indica login de Admin
+      await login(formData, true);
+      toast.success("Bem-vindo, Administrador.");
       navigate('/putiroski/dashboard');
-    } catch (err) {
-      toast.error('Credenciais inválidas.');
+    } catch (error) {
+      console.error(error);
+      const msg = error.response?.data?.message || "Acesso negado.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-700">
-        <div className="bg-gray-800 p-8 text-center border-b border-gray-700">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/50">
-            <Shield size={32} className="text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-white tracking-wide">Acesso Restrito</h2>
-          <p className="text-gray-400 text-sm mt-1">Área Administrativa</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
+      <div className="max-w-sm w-full bg-white rounded-xl shadow-2xl overflow-hidden">
+        <div className="bg-red-600 p-6 text-center">
+            <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                <ShieldAlert size={32} className="text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-white">Área Restrita</h2>
+            <p className="text-red-100 text-sm">Acesso exclusivo administrativo</p>
         </div>
 
-        <form onSubmit={handleLogin} className="p-8 space-y-6">
-          <div>
-            <label className="block text-gray-400 text-xs font-bold uppercase mb-2">Login Administrativo</label>
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Shield size={18} className="text-gray-500" />
-                </div>
+        <div className="p-8">
+            <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">E-mail Corporativo</label>
                 <input 
-                  type="email" 
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder-gray-500"
-                  placeholder="admin@graficamoderna.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
+                    name="email"
+                    type="email"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-red-500 outline-none"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
                 />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-gray-400 text-xs font-bold uppercase mb-2">Senha de Segurança</label>
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock size={18} className="text-gray-500" />
-                </div>
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Senha de Acesso</label>
                 <input 
-                  type="password" 
-                  className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder-gray-500"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                    name="password"
+                    type="password"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-red-500 outline-none"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
                 />
             </div>
-          </div>
 
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:brightness-110 text-white font-bold py-3 rounded-lg shadow-lg transform transition hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Validando...' : 'Acessar Painel'}
-          </button>
-        </form>
-
-        <div className="bg-gray-900/50 p-4 text-center border-t border-gray-700">
-            <p className="text-xs text-gray-500 flex items-center justify-center gap-2">
-                <Lock size={12} /> Conexão Segura e Monitorada
-            </p>
+            <button 
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white font-bold py-3 rounded-lg transition-colors flex justify-center items-center gap-2 mt-4"
+            >
+                <Lock size={18} />
+                {loading ? 'Autenticando...' : 'Acessar Painel'}
+            </button>
+            </form>
+            
+            <div className="mt-6 text-center border-t border-gray-100 pt-4">
+                <button onClick={() => navigate('/')} className="text-sm text-gray-500 hover:text-gray-800">
+                    ← Voltar para a Loja
+                </button>
+            </div>
         </div>
       </div>
     </div>

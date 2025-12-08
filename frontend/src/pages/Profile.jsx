@@ -1,55 +1,152 @@
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Mail } from 'lucide-react';
-import api from '../services/api';
-import { AddressManager } from '../components/AddressManager';
+import { useAuth } from '../context/AuthContext';
+import authService from '../services/authService';
 import toast from 'react-hot-toast';
+import { User, Phone, FileText, Save, Loader } from 'lucide-react';
 
 export const Profile = () => {
-  const [userData, setUserData] = useState({ fullName: '', email: '' });
+  const { user, logout } = useAuth(); // Pega dados iniciais do contexto
+  const [formData, setFormData] = useState({
+    fullName: '',
+    phoneNumber: '',
+    cpfCnpj: '',
+    email: ''
+  });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get('/auth/profile')
-      .then(res => setUserData(res.data))
-      .catch(() => toast.error("Erro ao carregar perfil."))
-      .finally(() => setLoading(false));
+    // Busca dados atualizados do servidor ao carregar
+    const fetchProfile = async () => {
+      try {
+        const data = await authService.getProfile();
+        setFormData({
+            fullName: data.fullName || '',
+            phoneNumber: data.phoneNumber || '',
+            cpfCnpj: data.cpfCnpj || '',
+            email: data.email || '' // Email geralmente é readonly
+        });
+      } catch (error) {
+        toast.error("Erro ao carregar perfil.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
   }, []);
 
-  if (loading) return <div className="text-center py-20">Carregando...</div>;
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await authService.updateProfile({
+        fullName: formData.fullName,
+        phoneNumber: formData.phoneNumber,
+        cpfCnpj: formData.cpfCnpj
+      });
+      toast.success("Perfil atualizado com sucesso!");
+    } catch (error) {
+      const msg = error.response?.data?.message || "Erro ao atualizar.";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+        <div className="flex justify-center items-center h-96">
+            <Loader className="animate-spin text-primary" size={40} />
+        </div>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8 flex items-center gap-3">
-        <User className="text-primary" /> Meu Perfil
-      </h1>
+    <div className="container mx-auto px-4 py-12 max-w-2xl">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Meu Perfil</h1>
+      
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+                
+                {/* Email (Readonly) */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">E-mail (não alterável)</label>
+                    <input 
+                        value={formData.email}
+                        readOnly
+                        className="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-500 cursor-not-allowed"
+                    />
+                </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1 h-fit bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex flex-col items-center text-center mb-6">
-            {/* Avatar com cor primária */}
-            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-3xl mb-3">
-              {userData.fullName?.charAt(0) || 'U'}
-            </div>
-            <h2 className="text-xl font-bold text-gray-800">{userData.fullName}</h2>
-            <p className="text-sm text-gray-500 mb-4 flex items-center gap-2 justify-center"><Mail size={14}/> {userData.email}</p>
-            
-            <p className="text-sm text-gray-500 mb-2 flex items-center gap-2 justify-center">
-              <FileText size={14}/> {userData.cpfCnpj || 'CPF não informado'}
-            </p>
+                {/* Nome */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
+                    <div className="relative">
+                        <User className="absolute left-3 top-3 text-gray-400" size={18} />
+                        <input 
+                            name="fullName"
+                            value={formData.fullName}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary outline-none"
+                            required
+                        />
+                    </div>
+                </div>
 
-            <div className="w-full pt-4 border-t border-gray-100">
-               <div className="flex items-center justify-center gap-2 text-gray-700 bg-gray-50 p-2 rounded-lg">
-                  <Phone size={16} className="text-primary"/>
-                  <span className="font-mono text-sm">{userData.phoneNumber || 'Sem telefone'}</span>
-               </div>
-            </div>
-          </div>
-        </div>
+                {/* CPF/CNPJ */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">CPF ou CNPJ</label>
+                    <div className="relative">
+                        <FileText className="absolute left-3 top-3 text-gray-400" size={18} />
+                        <input 
+                            name="cpfCnpj"
+                            value={formData.cpfCnpj}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary outline-none"
+                            required
+                        />
+                    </div>
+                </div>
 
-        <div className="lg:col-span-2">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-             <AddressManager />
-          </div>
+                {/* Telefone */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Telefone / Celular</label>
+                    <div className="relative">
+                        <Phone className="absolute left-3 top-3 text-gray-400" size={18} />
+                        <input 
+                            name="phoneNumber"
+                            value={formData.phoneNumber}
+                            onChange={handleChange}
+                            className="w-full border border-gray-300 rounded-lg pl-10 p-3 focus:ring-2 focus:ring-primary outline-none"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div className="pt-4 flex gap-4">
+                    <button 
+                        type="submit"
+                        disabled={saving}
+                        className="flex-1 bg-primary hover:brightness-90 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 shadow-lg shadow-primary/30 transition-all disabled:opacity-70"
+                    >
+                        {saving ? <Loader className="animate-spin" size={20} /> : <Save size={20} />}
+                        {saving ? 'Salvando...' : 'Salvar Alterações'}
+                    </button>
+
+                    <button 
+                        type="button"
+                        onClick={logout}
+                        className="px-6 py-3 border border-red-200 text-red-600 font-bold rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                        Sair da Conta
+                    </button>
+                </div>
+            </form>
         </div>
       </div>
     </div>

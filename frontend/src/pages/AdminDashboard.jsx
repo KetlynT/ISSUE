@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
-import AuthService from '../services/authService';
 import { CartService } from '../services/cartService';
 import { DashboardService } from '../services/dashboardService';
 import { CouponService } from '../services/couponService';
@@ -19,58 +18,76 @@ import { useAuth } from '../context/AuthContext';
 
 export const AdminDashboard = () => {
   const [logoUrl, setLogoUrl] = useState('');
-  const { user } = useAuth();
-  const { logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview'); 
+  const [isAuthorized, setIsAuthorized] = useState(false);
   
   useEffect(() => {
-    if (user && user.role !== 'Admin') {
-      navigate('/'); 
+    // Se ainda está carregando a auth, não faz nada
+    if (authLoading) return;
+
+    // Se carregou e não é admin, chuta
+    if (!user || user.role !== 'Admin') {
       toast.error("Acesso não autorizado.");
+      navigate('/');
+      return;
     }
+
+    // Se chegou aqui, é admin
+    setIsAuthorized(true);
+
     const loadSettings = async () => {
           try {
             const settings = await ContentService.getSettings();
-            if (settings) {
-                if (settings.site_logo) setLogoUrl(settings.site_logo);
+            if (settings && settings.site_logo) {
+                setLogoUrl(settings.site_logo);
             }
           } catch (error) {
-            console.error("Erro ao carregar topo", error);
+            console.error("Erro ao carregar configurações", error);
           }
         };
-        loadSettings();
-  }, [user, navigate]);
+    loadSettings();
+  }, [user, authLoading, navigate]);
 
-      
+  // Enquanto verifica autorização ou carrega auth, mostra loading
+  if (authLoading || !isAuthorized) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="animate-pulse flex flex-col items-center">
+                <div className="h-12 w-12 bg-gray-300 rounded-full mb-4"></div>
+                <div className="h-4 w-48 bg-gray-300 rounded"></div>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-2">
-                {logoUrl ? (
-  <img src={logoUrl} alt="Logo" className="h-10 w-auto" />
-) : (
-  <div className="h-10 w-24 flex items-center justify-center text-xs font-medium text-gray-600 border rounded">
-    {"<logo />"}
-  </div>
-)}
-
-           <h1 className="text-xl font-bold text-gray-800">Painel Restrito</h1>
+            {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="h-10 w-auto object-contain" />
+            ) : (
+                <div className="h-10 w-24 flex items-center justify-center text-xs font-medium text-gray-600 border rounded bg-gray-50">
+                    LOGO
+                </div>
+            )}
+           <h1 className="text-xl font-bold text-gray-800 ml-2">Painel Restrito</h1>
         </div>
         <div className="flex items-center gap-4">
-            <a href="/" className="text-sm text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">Ver Site</a>
+            <a href="/" className="text-sm text-blue-600 hover:underline font-medium" target="_blank" rel="noopener noreferrer">Ver Loja</a>
             <button 
-            onClick={logout} 
-            className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors font-medium text-sm"
+                onClick={logout} 
+                className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors font-medium text-sm bg-gray-100 hover:bg-red-50 px-4 py-2 rounded-lg"
             >
-            <LogOut size={18} /> Sair
+                <LogOut size={18} /> Sair
             </button>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto p-6 lg:p-10">
-        <div className="flex gap-4 mb-8 border-b border-gray-200 pb-1 overflow-x-auto">
+      <div className="max-w-7xl mx-auto p-4 lg:p-8">
+        <div className="flex gap-2 mb-8 border-b border-gray-200 overflow-x-auto pb-1 no-scrollbar">
             <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<BarChart2 size={18} />}>
                 Visão Geral
             </TabButton>

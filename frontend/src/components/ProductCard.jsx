@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Search } from 'lucide-react';
+import { ShoppingCart, Search, Edit } from 'lucide-react';
 import { Button } from './ui/Button';
 import { useCart } from '../context/CartContext';
-import AuthService from '../services/authService';
+import { useAuth } from '../context/AuthContext'; // CORREÇÃO: Importar useAuth
 
 export const ProductCard = ({ product, purchaseEnabled = true }) => {
   const { addToCart } = useCart();
+  const { user } = useAuth(); // CORREÇÃO: Usar o usuário do contexto
   const [imgSrc, setImgSrc] = useState(product.imageUrl);
 
   useEffect(() => {
     setImgSrc(product.imageUrl);
   }, [product.imageUrl]);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAdmin = AuthService.isAuthenticated() && user.role === 'Admin';
+  // CORREÇÃO: Validação segura de role
+  const isAdmin = user?.role === 'Admin';
 
   const formattedPrice = new Intl.NumberFormat('pt-BR', {
     style: 'currency', currency: 'BRL'
@@ -54,6 +55,14 @@ export const ProductCard = ({ product, purchaseEnabled = true }) => {
                     <Search size={20} />
                 </Button>
             </Link>
+            {/* Se for admin, mostra botão de editar */}
+            {isAdmin && (
+               <Link to={`/putiroski/produtos/${product.id}`}>
+                  <Button variant="ghost" className="bg-white text-blue-600 hover:bg-blue-50 rounded-full p-3 shadow-lg">
+                      <Edit size={20} />
+                  </Button>
+               </Link>
+            )}
         </div>
       </div>
 
@@ -74,6 +83,7 @@ export const ProductCard = ({ product, purchaseEnabled = true }) => {
             <span className="text-xl font-bold text-primary">{formattedPrice}</span>
           </div>
           
+          {/* Admin não compra, vê apenas detalhes. Cliente vê carrinho se compra ativa */}
           {!isAdmin && purchaseEnabled && (
             <Button 
                 size="sm"

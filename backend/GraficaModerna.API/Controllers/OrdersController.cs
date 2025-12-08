@@ -64,8 +64,8 @@ public class OrdersController(IOrderService orderService, IContentService conten
         return Ok(orders);
     }
 
-    [HttpPost("{id}/cancel")]
-    public async Task<IActionResult> RequestCancel(Guid id)
+    [HttpPost("{id}/request-refund")]
+    public async Task<IActionResult> RequestRefund(Guid id)
     {
         try
         {

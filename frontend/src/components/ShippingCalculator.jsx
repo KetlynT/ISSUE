@@ -13,8 +13,10 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
 
   const handleCalculate = async (e) => {
     e.preventDefault();
-    if (cep.length < 8) {
-      setError("Digite um CEP válido.");
+    
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      setError("Digite um CEP válido (8 números).");
       return;
     }
 
@@ -27,16 +29,12 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
     try {
       let result = [];
       
-      // Se tiver productId, calcula para 1 item. Senão, usa a lista de items do carrinho.
       if (productId) {
-        result = await ShippingService.calculateForProduct(productId, cep);
+        // Cálculo para produto único (Página de Detalhes)
+        result = await ShippingService.calculateForProduct(productId, cleanCep);
       } else if (items.length > 0) {
-        // Formata os itens para o formato que a API espera
-        const payloadItems = items.map(i => ({
-            productId: i.productId,
-            quantity: i.quantity
-        }));
-        result = await ShippingService.calculate(cep, payloadItems);
+        // Cálculo para carrinho
+        result = await ShippingService.calculate(cleanCep, items);
       } else {
         setError("Nenhum item para calcular.");
         setLoading(false);
@@ -46,8 +44,9 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
       setOptions(result);
     } catch (err) {
       console.error(err);
-      setError("Erro ao calcular frete. Verifique o CEP.");
-      toast.error("Não foi possível calcular o frete.");
+      const msg = err.response?.data?.message || "Erro ao calcular frete. Verifique o CEP.";
+      setError(msg);
+      toast.error("Falha no cálculo de frete.");
     } finally {
       setLoading(false);
     }
@@ -63,7 +62,6 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
   return (
     <div className={`bg-gray-50 p-5 rounded-lg border border-gray-200 ${className}`}>
       <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-        {/* Ícone com cor primária */}
         <Truck size={18} className="text-primary"/> Calcular Frete e Prazo
       </h3>
       
@@ -72,7 +70,6 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
           type="text" 
           placeholder="Digite seu CEP" 
           maxLength="9"
-          // Focus ring dinâmico
           className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary bg-white"
           value={cep} 
           onChange={(e) => setCep(e.target.value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2'))}
@@ -83,20 +80,19 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
       </form>
 
       {error && (
-        <div className="text-red-500 text-sm mb-3 flex items-center gap-1">
+        <div className="text-red-500 text-sm mb-3 flex items-center gap-1 bg-red-50 p-2 rounded border border-red-100">
           <AlertCircle size={14}/> {error}
         </div>
       )}
 
       {options && (
         <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-          {options.length === 0 && <div className="text-sm text-gray-500">Nenhuma opção disponível.</div>}
+          {options.length === 0 && <div className="text-sm text-gray-500">Nenhuma opção de entrega encontrada para este CEP.</div>}
           
           {options.map((opt, idx) => (
             <div 
               key={idx} 
               onClick={() => handleSelect(opt)}
-              // Seleção visual usando cores primárias
               className={`flex justify-between items-center p-3 rounded border cursor-pointer transition-all ${
                 selectedOption?.name === opt.name 
                   ? 'bg-primary/5 border-primary ring-1 ring-primary' 
@@ -104,7 +100,6 @@ export const ShippingCalculator = ({ items = [], productId = null, onSelectOptio
               }`}
             >
               <div className="flex items-center gap-3">
-                {/* Radio button customizado dinâmico */}
                 <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedOption?.name === opt.name ? 'border-primary' : 'border-gray-300'}`}>
                     {selectedOption?.name === opt.name && <div className="w-2 h-2 bg-primary rounded-full"/>}
                 </div>

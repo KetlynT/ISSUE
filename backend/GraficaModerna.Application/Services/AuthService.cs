@@ -2,7 +2,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using System.Web; // Se der erro aqui, use System.Net.WebUtility.UrlEncode
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Application.Validators;
@@ -19,13 +18,13 @@ public class AuthService(
     IConfiguration configuration,
     IContentService contentService,
     IPasswordHasher<ApplicationUser> passwordHasher,
-    IEmailService emailService) : IAuthService // Adicionado IEmailService aqui
+    IEmailService emailService) : IAuthService
 {
     private readonly IConfiguration _configuration = configuration;
     private readonly IPasswordHasher<ApplicationUser> _passwordHasher = passwordHasher;
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly IContentService _contentService = contentService;
-    private readonly IEmailService _emailService = emailService; // Campo privado
+    private readonly IEmailService _emailService = emailService;
 
     private async Task CheckPurchaseEnabled()
     {
@@ -45,6 +44,11 @@ public class AuthService(
     {
         await CheckRegistrationEnabled();
 
+        if (!DocumentValidator.IsValid(dto.CpfCnpj))
+        {
+            throw new Exception("O documento informado (CPF ou CNPJ) é inválido.");
+        }
+
         var user = new ApplicationUser
         {
             UserName = dto.Email,
@@ -52,7 +56,7 @@ public class AuthService(
             FullName = dto.FullName,
             CpfCnpj = dto.CpfCnpj,
             PhoneNumber = dto.PhoneNumber,
-            EmailConfirmed = false // Garante que inicia como não confirmado
+            EmailConfirmed = false
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);
@@ -71,12 +75,10 @@ public class AuthService(
 
         await _userManager.AddToRoleAsync(user, Roles.User);
 
-        // --- Lógica de Email de Confirmação ---
         try
         {
             var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-            // Se preferir não usar System.Web, use Uri.EscapeDataString(token)
-            var encodedToken = HttpUtility.UrlEncode(token);
+            var encodedToken = Uri.EscapeDataString(token);
             var frontendUrl = _configuration["FRONTEND_URL"] ?? "http://localhost:5173";
             var link = $"{frontendUrl}/confirm-email?userid={user.Id}&token={encodedToken}";
 
@@ -90,7 +92,6 @@ public class AuthService(
         }
         catch
         {
-            // Falha silenciosa no envio do e-mail para não impedir o cadastro
         }
 
         return await CreateTokenPairAsync(user);
@@ -100,8 +101,6 @@ public class AuthService(
     {
         var user = await _userManager.FindByEmailAsync(dto.Email)
                    ?? throw new Exception("Credenciais inválidas.");
-
-        // Opcional: Validar se EmailConfirmed == true aqui se desejar bloquear não confirmados
 
         if (await _userManager.IsLockedOutAsync(user))
         {
@@ -141,7 +140,6 @@ public class AuthService(
             await CheckPurchaseEnabled();
         }
 
-        // --- Email de Alerta de Login ---
         _ = Task.Run(async () =>
         {
             try
@@ -206,8 +204,6 @@ public class AuthService(
         if (!result.Succeeded) throw new Exception("Erro ao atualizar perfil.");
     }
 
-    // --- NOVOS MÉTODOS DE EMAIL E SENHA ---
-
     public async Task ConfirmEmailAsync(ConfirmEmailDto dto)
     {
         var user = await _userManager.FindByIdAsync(dto.UserId) ?? throw new Exception("Usuário inválido.");
@@ -224,7 +220,7 @@ public class AuthService(
         try
         {
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-            var encodedToken = HttpUtility.UrlEncode(token);
+            var encodedToken = Uri.EscapeDataString(token);
             var frontendUrl = _configuration["FRONTEND_URL"] ?? "http://localhost:5173";
             var link = $"{frontendUrl}/reset-password?email={dto.Email}&token={encodedToken}";
 
@@ -250,8 +246,6 @@ public class AuthService(
 
         _ = Task.Run(() => _emailService.SendEmailAsync(user.Email!, "Senha Alterada", "<p>Sua senha foi alterada com sucesso.</p>"));
     }
-
-    // --- MÉTODOS PRIVADOS EXISTENTES ---
 
     private async Task<AuthResponseDto> CreateTokenPairAsync(ApplicationUser user)
     {

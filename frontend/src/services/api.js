@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://localhost:7255/api';
+
 const api = axios.create({
-  baseURL: 'https://localhost:7255/api', // Somente HTTPS
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -23,12 +25,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('access_token');
-      const isLoginRequest = error.config.url.includes('/login') || error.config.url.includes('/auth');
-      if (!isLoginRequest) {
-          window.location.href = '/';
+      const token = localStorage.getItem('access_token');
+      // Só limpa e redireciona se já existia um token (sessão expirou)
+      if (token) {
+        localStorage.removeItem('access_token');
+        const isAuthRoute = error.config.url.includes('/login') || error.config.url.includes('/auth');
+        if (!isAuthRoute) {
+            // Opcional: Redirecionar para login ou apenas limpar estado
+            window.location.href = '/login';
+        }
       }
-      console.warn('Sessão expirada ou não autenticada.');
     }
     return Promise.reject(error);
   }

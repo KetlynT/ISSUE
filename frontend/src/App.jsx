@@ -9,9 +9,13 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import { CookieConsent } from './components/CookieConsent';
 
+// Lazy load pages
 const Home = lazy(() => import('./pages/Home').then(module => ({ default: module.Home })));
 const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
 const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(module => ({ default: module.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then(module => ({ default: module.ResetPassword })));
+const ConfirmEmail = lazy(() => import('./pages/ConfirmEmail').then(module => ({ default: module.ConfirmEmail })));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 const AdminLogin = lazy(() => import('./pages/AdminLogin').then(module => ({ default: module.AdminLogin })));
 const ProductDetails = lazy(() => import('./pages/ProductDetails').then(module => ({ default: module.ProductDetails })));
@@ -60,8 +64,12 @@ const PurchaseGuard = ({ children }) => {
     
     useEffect(() => {
         const check = async () => {
-            const settings = await ContentService.getSettings();
-            setEnabled(settings?.purchase_enabled !== 'false');
+            try {
+                const settings = await ContentService.getSettings();
+                setEnabled(settings?.purchase_enabled !== 'false');
+            } catch {
+                setEnabled(true);
+            }
         };
         check();
     }, []);
@@ -125,6 +133,10 @@ function App() {
               </Route>
 
               <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+              <Route path="/esqueci-senha" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
+              <Route path="/reset-password" element={<PublicOnlyRoute><ResetPassword /></PublicOnlyRoute>} />
+              <Route path="/confirm-email" element={<PublicOnlyRoute><ConfirmEmail /></PublicOnlyRoute>} />
+
               <Route path="/cadastro" element={<PublicOnlyRoute><PurchaseGuard><Register /></PurchaseGuard></PublicOnlyRoute>} />
               
               <Route path="/putiroski" element={<PublicOnlyRoute><AdminLogin /></PublicOnlyRoute>} />

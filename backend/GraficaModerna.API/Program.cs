@@ -265,6 +265,8 @@ builder.Services.AddScoped<IContentService, ContentService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<MetadataSecurityService>();
+
 builder.Services.AddSingleton<IHtmlSanitizer>(s =>
 {
     var sanitizer = new HtmlSanitizer();

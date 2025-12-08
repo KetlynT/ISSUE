@@ -5,17 +5,14 @@ const TOKEN_KEY = 'access_token';
 const authService = {
   login: async (credentials, isAdmin = false) => {
     const url = isAdmin ? '/auth/admin/login' : '/auth/login';
-    
     const response = await api.post(url, credentials);
     const data = response.data || {};
-    
     if (data.token) {
       try { localStorage.setItem(TOKEN_KEY, data.token); } catch {}
     }
     return data;
   },
 
-  // Registro: backend returns token too
   register: async (data) => {
     const response = await api.post('/auth/register', data);
     const result = response.data || {};
@@ -25,17 +22,14 @@ const authService = {
     return result;
   },
 
-  // Logout: notify backend to blacklist token and clear local storage
   logout: async () => {
     try {
       await api.post('/auth/logout');
     } catch (e) {
-      // ignore backend error
     }
     try { localStorage.removeItem(TOKEN_KEY); } catch {}
   },
 
-  // Perfil: Busca dados do utilizador logado.
   getProfile: async () => {
     const response = await api.get('/auth/profile');
     return response.data;
@@ -59,13 +53,24 @@ const authService = {
     }
   },
 
-  // CORREÇÃO: Método adicionado para o CartContext usar
   isAuthenticated: () => {
     try {
       return !!localStorage.getItem(TOKEN_KEY);
     } catch {
       return false;
     }
+  },
+
+  confirmEmail: async (userId, token) => {
+    return await api.post('/auth/confirm-email', { userId, token });
+  },
+
+  forgotPassword: async (email) => {
+    return await api.post('/auth/forgot-password', { email });
+  },
+
+  resetPassword: async (data) => {
+    return await api.post('/auth/reset-password', data);
   }
 };
 
