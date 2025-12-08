@@ -1,4 +1,6 @@
-﻿namespace GraficaModerna.Domain.Entities;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace GraficaModerna.Domain.Entities;
 
 public class Order
 {
@@ -8,6 +10,10 @@ public class Order
     public Guid Id { get; set; }
 
     public string UserId { get; set; } = string.Empty;
+
+    [ForeignKey("UserId")]
+    public virtual ApplicationUser? User { get; set; }
+
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     public DateTime? DeliveryDate { get; set; }
 

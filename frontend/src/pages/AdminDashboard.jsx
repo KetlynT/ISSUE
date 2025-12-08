@@ -493,7 +493,9 @@ const OrdersTab = () => {
             const lowerTerm = searchTerm.toLowerCase();
             result = result.filter(o => 
                 o.id.toLowerCase().includes(lowerTerm) || 
-                o.shippingAddress.toLowerCase().includes(lowerTerm)
+                (o.customerName && o.customerName.toLowerCase().includes(lowerTerm)) ||
+                (o.customerCpf && o.customerCpf.includes(lowerTerm)) ||
+                (o.customerEmail && o.customerEmail.toLowerCase().includes(lowerTerm))
             );
         }
         setFilteredOrders(result);
@@ -557,7 +559,9 @@ const OrdersTab = () => {
                 status: statusInput, 
                 trackingCode: trackingInput,
                 reverseLogisticsCode: reverseCodeInput,
-                returnInstructions: returnInstructionsInput
+                returnInstructions: returnInstructionsInput,
+                refundRejectionReason: refundReason,
+                refundRejectionProof: refundProof
             } : o);
             
             setOrders(updatedList);
@@ -579,7 +583,7 @@ const OrdersTab = () => {
                         <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                         <input 
                             className="pl-10 pr-4 py-2 border rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Buscar ID ou Endereço..."
+                            placeholder="Buscar ID, Nome, CPF ou Email..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -607,8 +611,8 @@ const OrdersTab = () => {
                     <thead className="bg-gray-50 border-b text-gray-600 uppercase">
                         <tr>
                             <th className="p-4">Pedido</th>
+                            <th className="p-4">Cliente</th>
                             <th className="p-4">Status</th>
-                            <th className="p-4">Rastreio</th>
                             <th className="p-4 text-right">Total</th>
                             <th className="p-4 text-right">Ações</th>
                         </tr>
@@ -621,10 +625,17 @@ const OrdersTab = () => {
                                     <div className="text-xs text-gray-500">{new Date(o.orderDate).toLocaleDateString('pt-BR')}</div>
                                 </td>
                                 <td className="p-4 align-middle">
-                                    <OrderStatusBadge status={o.status} />
+                                    <div className="font-bold text-gray-800">{o.customerName || 'Cliente'}</div>
+                                    <div className="text-xs text-gray-500 flex flex-col">
+                                        <span>{o.customerCpf}</span>
+                                        <span>{o.customerEmail}</span>
+                                    </div>
                                 </td>
-                                <td className="p-4 align-middle font-mono text-xs text-gray-600">
-                                    {o.trackingCode || '-'}
+                                <td className="p-4 align-middle">
+                                    <OrderStatusBadge status={o.status} />
+                                    {o.trackingCode && (
+                                        <div className="text-xs text-gray-500 mt-1 font-mono">Rastreio: {o.trackingCode}</div>
+                                    )}
                                 </td>
                                 <td className="p-4 text-right align-middle font-bold text-green-700">
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(o.totalAmount)}
@@ -647,11 +658,29 @@ const OrdersTab = () => {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h3 className="text-xl font-bold text-gray-800">Pedido #{selectedOrder.id.slice(0,8)}</h3>
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-800">Pedido #{selectedOrder.id.slice(0,8)}</h3>
+                                <p className="text-sm text-gray-500">
+                                    {selectedOrder.customerName} - {selectedOrder.customerCpf}
+                                </p>
+                            </div>
                             <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600"><X size={24}/></button>
                         </div>
                         
                         <div className="p-6 space-y-6">
+                            <div className="grid md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded border border-gray-200 text-sm">
+                                <div>
+                                    <span className="block font-bold text-gray-600 text-xs uppercase mb-1">Cliente</span>
+                                    <div className="font-semibold">{selectedOrder.customerName}</div>
+                                    <div>{selectedOrder.customerEmail}</div>
+                                    <div>{selectedOrder.customerCpf}</div>
+                                </div>
+                                <div>
+                                    <span className="block font-bold text-gray-600 text-xs uppercase mb-1">Entrega</span>
+                                    <div className="text-gray-700 whitespace-pre-wrap leading-tight">{selectedOrder.shippingAddress}</div>
+                                </div>
+                            </div>
+
                             <div>
                                 <h4 className="font-bold text-sm text-gray-500 uppercase mb-3">Itens do Pedido</h4>
                                 <div className="bg-gray-50 rounded-lg p-4 space-y-2 border border-gray-100">
@@ -735,41 +764,41 @@ const OrdersTab = () => {
                                     )}
 
                                     {statusInput === 'Reembolso Reprovado' && (
-    <div className="bg-red-50 p-4 rounded border border-red-200 space-y-3 animate-in fade-in mt-3">
-        <h5 className="font-bold text-xs text-red-800 uppercase border-b border-red-200 pb-1 mb-2">
-            Motivo da Reprovação
-        </h5>
-        
-        <div>
-            <label className="block text-xs font-bold text-red-700 mb-1">Justificativa (Obrigatório)</label>
-            <textarea 
-                className="w-full border border-red-300 rounded p-2 text-sm outline-none focus:border-red-500 h-24 resize-none"
-                placeholder="Explique ao cliente por que o reembolso foi negado..."
-                value={refundReason}
-                onChange={e => setRefundReason(e.target.value)}
-                required={statusInput === 'Reembolso Reprovado'}
-            />
-        </div>
+                                        <div className="bg-red-50 p-4 rounded border border-red-200 space-y-3 animate-in fade-in mt-3">
+                                            <h5 className="font-bold text-xs text-red-800 uppercase border-b border-red-200 pb-1 mb-2">
+                                                Motivo da Reprovação
+                                            </h5>
+                                            
+                                            <div>
+                                                <label className="block text-xs font-bold text-red-700 mb-1">Justificativa (Obrigatório)</label>
+                                                <textarea 
+                                                    className="w-full border border-red-300 rounded p-2 text-sm outline-none focus:border-red-500 h-24 resize-none"
+                                                    placeholder="Explique ao cliente por que o reembolso foi negado..."
+                                                    value={refundReason}
+                                                    onChange={e => setRefundReason(e.target.value)}
+                                                    required={statusInput === 'Reembolso Reprovado'}
+                                                />
+                                            </div>
 
-        <div>
-            <label className="block text-xs font-bold text-red-700 mb-1">Prova / Evidência (Opcional)</label>
-            <div className="flex gap-2 items-center">
-                <input 
-                    type="file" 
-                    accept="image/*,video/mp4,video/webm"
-                    onChange={handleProofUpload}
-                    className="text-xs w-full file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-red-100 file:text-red-700 hover:file:bg-red-200"
-                />
-                {uploadingProof && <span className="text-xs text-gray-500">Enviando...</span>}
-            </div>
-            {refundProof && (
-                <div className="mt-2 text-xs text-green-600 truncate">
-                    Arquivo anexado: <a href={refundProof} target="_blank" rel="noopener noreferrer" className="underline">Ver arquivo</a>
-                </div>
-            )}
-        </div>
-    </div>
-)}
+                                            <div>
+                                                <label className="block text-xs font-bold text-red-700 mb-1">Prova / Evidência (Opcional)</label>
+                                                <div className="flex gap-2 items-center">
+                                                    <input 
+                                                        type="file" 
+                                                        accept="image/*,video/mp4,video/webm"
+                                                        onChange={handleProofUpload}
+                                                        className="text-xs w-full file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-red-100 file:text-red-700 hover:file:bg-red-200"
+                                                    />
+                                                    {uploadingProof && <span className="text-xs text-gray-500">Enviando...</span>}
+                                                </div>
+                                                {refundProof && (
+                                                    <div className="mt-2 text-xs text-green-600 truncate">
+                                                        Arquivo anexado: <a href={refundProof} target="_blank" rel="noopener noreferrer" className="underline">Ver arquivo</a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex justify-end gap-3">

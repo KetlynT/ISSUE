@@ -31,7 +31,6 @@ public record OrderDto(
     Guid Id,
     DateTime OrderDate,
     DateTime? DeliveryDate,
-
     decimal SubTotal,
     decimal Discount,
     decimal ShippingCost,
@@ -43,6 +42,9 @@ public record OrderDto(
     string? RefundRejectionReason,
     string? RefundRejectionProof,
     string ShippingAddress,
+    string CustomerName,
+    string CustomerCpf,
+    string CustomerEmail,
     List<OrderItemDto> Items
 );
 

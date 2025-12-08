@@ -173,6 +173,7 @@ public class OrderService(
         var orders = await _context.Orders
             .Where(o => o.UserId == userId)
             .Include(o => o.Items)
+            .Include(o => o.User)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
@@ -183,6 +184,7 @@ public class OrderService(
     {
         var orders = await _context.Orders
             .Include(o => o.Items)
+            .Include(o => o.User)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
@@ -410,7 +412,6 @@ public class OrderService(
         }
         catch
         {
-            // Logar erro de envio silenciosamente ou usar ILogger se disponível
         }
     }
 
@@ -428,9 +429,12 @@ public class OrderService(
             order.TrackingCode,
             order.ReverseLogisticsCode,
             order.ReturnInstructions,
-            order.RefundRejectionReason, // Novo campo
-            order.RefundRejectionProof,  // Novo campo
+            order.RefundRejectionReason,
+            order.RefundRejectionProof,
             order.ShippingAddress,
+            order.User?.FullName ?? "Cliente Desconhecido",
+            order.User?.CpfCnpj ?? "N/A",
+            order.User?.Email ?? "N/A",
             [
                 .. order.Items.Select(i =>
                     new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)
