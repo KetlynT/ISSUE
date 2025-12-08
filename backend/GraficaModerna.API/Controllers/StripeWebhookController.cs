@@ -1,5 +1,7 @@
 ﻿using System.Net;
+using System.Security;
 using GraficaModerna.Application.Interfaces;
+using GraficaModerna.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -18,15 +20,18 @@ public class StripeWebhookController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly ILogger<StripeWebhookController> _logger;
     private readonly IOrderService _orderService;
+    private readonly MetadataSecurityService _securityService;
 
     public StripeWebhookController(
         IConfiguration configuration,
         IOrderService orderService,
-        ILogger<StripeWebhookController> logger)
+        ILogger<StripeWebhookController> logger,
+        MetadataSecurityService securityService)
     {
         _configuration = configuration;
         _orderService = orderService;
         _logger = logger;
+        _securityService = securityService;
 
         var ipsString = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_IPS")
                         ?? _configuration["STRIPE_WEBHOOK_IPS"];
@@ -48,7 +53,7 @@ public class StripeWebhookController : ControllerBase
     {
         if (!IsRequestFromStripe(HttpContext.Connection.RemoteIpAddress))
         {
-            _logger.LogWarning("[Webhook] Tentativa de acesso bloqueada de IP não autorizado: {IP}", 
+            _logger.LogWarning("[Webhook] Tentativa de acesso bloqueada de IP não autorizado: {IP}",
                 HttpContext.Connection.RemoteIpAddress);
             return StatusCode(403, "Forbidden: Source Denied");
         }
@@ -70,72 +75,89 @@ public class StripeWebhookController : ControllerBase
 
             if (stripeEvent.Type == Events.CheckoutSessionCompleted)
             {
-                if (stripeEvent.Data.Object is Session session &&
-                    session.Metadata != null &&
-                    session.Metadata.TryGetValue("order_id", out var orderIdString))
+                if (stripeEvent.Data.Object is Session session && session.Metadata != null)
                 {
-                    if (Guid.TryParse(orderIdString, out var orderId))
+                    if (session.Metadata.TryGetValue("order_data", out var encryptedOrder) &&
+                        session.Metadata.TryGetValue("sig", out var signatureMeta))
                     {
-                        var transactionId = session.PaymentIntentId;
-                        var amountPaid = session.AmountTotal ?? 0;
-
-                        if (string.IsNullOrEmpty(transactionId))
-                        {
-                            _logger.LogError("[Webhook] PaymentIntentId ausente para Order {OrderId}", orderId);
-                            return BadRequest("Missing PaymentIntentId");
-                        }
-
-                        if (amountPaid <= 0)
-                        {
-                            _logger.LogError("[Webhook] Valor pago inválido ({Amount}) para Order {OrderId}", 
-                                amountPaid, orderId);
-                            return BadRequest("Invalid payment amount");
-                        }
-
-                        _logger.LogInformation(
-                            "[Webhook] Processando pagamento para Order {OrderId}. Transaction: {TransactionId}. Amount: {Amount} cents",
-                            orderId, transactionId, amountPaid);
-
                         try
                         {
+                            var plainOrderId = _securityService.Unprotect(encryptedOrder, signatureMeta);
+
+                            if (!Guid.TryParse(plainOrderId, out var orderId))
+                            {
+                                _logger.LogError("ID descriptografado inválido.");
+                                return BadRequest("Invalid Order ID format");
+                            }
+
+                            var transactionId = session.PaymentIntentId;
+                            var amountPaid = session.AmountTotal ?? 0;
+
+                            if (string.IsNullOrEmpty(transactionId))
+                            {
+                                _logger.LogError("[Webhook] PaymentIntentId ausente para Order {OrderId}", orderId);
+                                return BadRequest("Missing PaymentIntentId");
+                            }
+
+                            if (amountPaid <= 0)
+                            {
+                                _logger.LogError("[Webhook] Valor pago inválido ({Amount}) para Order {OrderId}",
+                                    amountPaid, orderId);
+                                return BadRequest("Invalid payment amount");
+                            }
+
+                            _logger.LogInformation(
+                                "[Webhook] Processando pagamento para Order {OrderId}. Transaction: {TransactionId}. Amount: {Amount} cents",
+                                orderId, transactionId, amountPaid);
+
                             await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
-                            
+
                             _logger.LogInformation(
                                 "[Webhook] Pagamento confirmado com sucesso. Order {OrderId}", orderId);
                         }
+                        catch (SecurityException)
+                        {
+                            _logger.LogCritical("FALHA DE INTEGRIDADE: Assinatura dos metadados inválida no Webhook.");
+                            return StatusCode(403, "Integrity Check Failed");
+                        }
                         catch (Exception ex)
                         {
-                            _logger.LogCritical(ex, 
-                                "[Webhook] ERRO CRÍTICO ao confirmar pagamento. Order {OrderId}, Transaction {TransactionId}", 
-                                orderId, transactionId);
+                            _logger.LogCritical(ex,
+                                "[Webhook] ERRO CRÍTICO ao confirmar pagamento.");
                             return StatusCode(500, "Payment confirmation failed");
                         }
                     }
                     else
                     {
-                        _logger.LogWarning("[Webhook] Order ID inválido nos metadados: {OrderIdString}", orderIdString);
+                        _logger.LogWarning("[Webhook] Metadados de segurança ausentes ou inválidos no evento checkout.session.completed");
                     }
-                }
-                else
-                {
-                    _logger.LogWarning("[Webhook] Metadados ausentes ou inválidos no evento checkout.session.completed");
                 }
             }
             else if (stripeEvent.Type == Events.CheckoutSessionAsyncPaymentSucceeded)
             {
-                if (stripeEvent.Data.Object is Session session &&
-                    session.Metadata != null &&
-                    session.Metadata.TryGetValue("order_id", out var orderIdString))
+                if (stripeEvent.Data.Object is Session session && session.Metadata != null)
                 {
-                    if (Guid.TryParse(orderIdString, out var orderId))
+                    if (session.Metadata.TryGetValue("order_data", out var encryptedOrder) &&
+                       session.Metadata.TryGetValue("sig", out var signatureMeta))
                     {
-                        var transactionId = session.PaymentIntentId;
-                        var amountPaid = session.AmountTotal ?? 0;
+                        try
+                        {
+                            var plainOrderId = _securityService.Unprotect(encryptedOrder, signatureMeta);
+                            if (Guid.TryParse(plainOrderId, out var orderId))
+                            {
+                                var transactionId = session.PaymentIntentId;
+                                var amountPaid = session.AmountTotal ?? 0;
 
-                        _logger.LogInformation(
-                            "[Webhook] Pagamento assíncrono bem-sucedido para Order {OrderId}", orderId);
+                                _logger.LogInformation(
+                                    "[Webhook] Pagamento assíncrono bem-sucedido para Order {OrderId}", orderId);
 
-                        await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
+                                await _orderService.ConfirmPaymentViaWebhookAsync(orderId, transactionId, amountPaid);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "[Webhook] Erro ao processar metadados no pagamento assíncrono.");
+                        }
                     }
                 }
             }
@@ -168,13 +190,13 @@ public class StripeWebhookController : ControllerBase
 
     private bool IsRequestFromStripe(IPAddress? remoteIp)
     {
-        if (remoteIp == null) 
+        if (remoteIp == null)
         {
             _logger.LogWarning("[Webhook] IP remoto é nulo");
             return false;
         }
 
-        if (IPAddress.IsLoopback(remoteIp)) 
+        if (IPAddress.IsLoopback(remoteIp))
             return true;
 
         if (_authorizedIps.Count == 0)

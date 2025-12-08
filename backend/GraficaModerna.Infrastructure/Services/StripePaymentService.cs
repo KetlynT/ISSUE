@@ -1,5 +1,6 @@
 ﻿using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Domain.Entities;
+using GraficaModerna.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Stripe;
@@ -11,11 +12,13 @@ public class StripePaymentService : IPaymentService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<StripePaymentService> _logger;
+    private readonly MetadataSecurityService _securityService;
 
-    public StripePaymentService(IConfiguration configuration, ILogger<StripePaymentService> logger)
+    public StripePaymentService(IConfiguration configuration, ILogger<StripePaymentService> logger, MetadataSecurityService securityService)
     {
         _configuration = configuration;
         _logger = logger;
+        _securityService = securityService;
 
         var apiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? _configuration["Stripe:SecretKey"];
 
@@ -41,16 +44,17 @@ public class StripePaymentService : IPaymentService
             var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
             var cancelUrl = $"{frontendUrl}/meus-pedidos";
 
+            var (encryptedOrder, signature) = _securityService.Protect(order.Id.ToString());
+
             var options = new SessionCreateOptions
             {
                 Mode = "payment",
                 SuccessUrl = successUrl,
                 CancelUrl = cancelUrl,
-                // Correção: Removemos dados sensíveis/incorretos (user_email, expected_amount)
-                // Mantemos apenas o order_id para reconciliação no Webhook.
                 Metadata = new Dictionary<string, string>
                 {
-                    { "order_id", order.Id.ToString() }
+                    { "order_data", encryptedOrder },
+                    { "sig", signature }
                 },
                 LineItems = []
             };

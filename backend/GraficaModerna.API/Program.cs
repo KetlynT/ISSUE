@@ -107,7 +107,7 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 30,
+                PermitLimit = 10,
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(5)
             }));
@@ -265,7 +265,33 @@ builder.Services.AddScoped<IContentService, ContentService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<IShippingService, MelhorEnvioShippingService>();
 builder.Services.AddScoped<IEmailService, ConsoleEmailService>();
-builder.Services.AddSingleton<IHtmlSanitizer, HtmlSanitizer>(s => new HtmlSanitizer());
+builder.Services.AddSingleton<IHtmlSanitizer>(s =>
+{
+    var sanitizer = new HtmlSanitizer();
+
+    sanitizer.AllowedTags.Clear();
+    sanitizer.AllowedAttributes.Clear();
+    sanitizer.AllowedCssProperties.Clear();
+
+    sanitizer.AllowedTags.UnionWith(SanitizerRules.AllowedTags);
+    sanitizer.AllowedAttributes.UnionWith(SanitizerRules.AllowedAttributes);
+    sanitizer.AllowedCssProperties.UnionWith(SanitizerRules.AllowedCssProperties);
+
+    sanitizer.FilterUrl += (sender, args) =>
+    {
+        if (string.IsNullOrWhiteSpace(args.OriginalUrl)) return;
+
+        if (!args.OriginalUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !args.OriginalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+            !args.OriginalUrl.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) &&
+            !args.OriginalUrl.StartsWith('/'))
+        {
+            args.SanitizedUrl = null;
+        }
+    };
+
+    return sanitizer;
+});
 
 builder.Services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 builder.Services.AddFluentValidationAutoValidation();
@@ -444,3 +470,30 @@ using (var scope = app.Services.CreateScope())
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+internal static class SanitizerRules
+{
+    public static readonly string[] AllowedTags =
+    [
+        "p", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr",
+        "b", "strong", "i", "em", "u", "s", "strike", "sub", "sup",
+        "div", "span", "blockquote", "pre", "code",
+        "ul", "ol", "li", "dl", "dt", "dd",
+        "table", "thead", "tbody", "tfoot", "tr", "th", "td",
+        "a", "img"
+    ];
+
+    public static readonly string[] AllowedAttributes =
+    [
+        "class", "id", "style", "title", "alt",
+        "href", "target", "rel",
+        "src", "width", "height",
+        "colspan", "rowspan", "align", "valign"
+    ];
+
+    public static readonly string[] AllowedCssProperties =
+    [
+        "text-align", "padding", "margin", "color", "background-color",
+        "font-size", "font-weight", "text-decoration", "width", "height"
+    ];
+}
