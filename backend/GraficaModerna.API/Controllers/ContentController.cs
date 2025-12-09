@@ -55,8 +55,6 @@ public class ContentController(IContentService service, IHtmlSanitizer sanitizer
         if (page == null)
             return NotFound();
 
-        if (!string.IsNullOrEmpty(page.Content)) page.Content = _sanitizer.Sanitize(page.Content);
-
         return Ok(page);
     }
 

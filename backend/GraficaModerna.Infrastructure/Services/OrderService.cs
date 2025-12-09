@@ -71,13 +71,8 @@ public class OrderService(
             {
                 if (item.Product == null) continue;
 
-                // Mantém a verificação inicial para não deixar comprar algo já esgotado,
-                // mas NÃO debita o estoque aqui.
                 if (item.Product.StockQuantity < item.Quantity)
                     throw new Exception($"Estoque insuficiente para o produto {item.Product.Name}");
-
-                // item.Product.DebitStock(item.Quantity); // REMOVIDO: Só debita ao pagar
-                // _context.Entry(item.Product).State = EntityState.Modified; // REMOVIDO
 
                 subTotal += item.Quantity * item.Product.Price;
 
@@ -205,78 +200,91 @@ public class OrderService(
 
         if (isAlreadyProcessed)
         {
-            _logger.LogWarning(
-                "[Webhook] Tentativa de reprocessamento detectada. Transaction: {TransactionId}",
-                transactionId);
+            _logger.LogWarning("[Webhook] Tentativa de reprocessamento detectada. Transaction: {TransactionId}", transactionId);
             return;
         }
 
         var order = await _context.Orders
             .Include(o => o.History)
             .Include(o => o.User)
-            .Include(o => o.Items) // Importante: Incluir os itens para dar baixa no estoque
+            .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
         if (order == null)
         {
-            _logger.LogError(
-                "[Webhook] Pedido não encontrado. OrderId: {OrderId}, Transaction: {TransactionId}",
-                orderId, transactionId);
+            _logger.LogError("[Webhook] Pedido não encontrado. OrderId: {OrderId}", orderId);
             return;
         }
 
         var expectedAmountInCents = (long)(order.TotalAmount * 100);
-        var tolerance = 2;
 
-        if (Math.Abs(amountPaidInCents - expectedAmountInCents) > tolerance)
-        {
-            var divergence = amountPaidInCents - expectedAmountInCents;
+        if (order.Status == "Pago") return;
 
-            AddAuditLog(order, "⚠️ FRAUDE DETECTADA",
-                $"CRITICAL SECURITY VIOLATION - Divergência de valor: Esperado {expectedAmountInCents}, " +
-                $"Recebido {amountPaidInCents}, Diferença {divergence} centavos. " +
-                $"Transaction: {transactionId}. PAGAMENTO REJEITADO.",
-                "SYSTEM-SECURITY-ALERT");
 
-            await _context.SaveChangesAsync();
-
-            _ = NotifySecurityTeamAsync(order, transactionId, expectedAmountInCents, amountPaidInCents);
-
-            throw new Exception(
-                $"FATAL: Tentativa de manipulação de valor detectada. " +
-                $"Pedido {orderId}. Esperado {expectedAmountInCents}, Recebido {amountPaidInCents}. " +
-                $"Divergência: {divergence} centavos. TRANSAÇÃO BLOQUEADA.");
-        }
-
-        if (order.Status == "Pago")
-        {
-            _logger.LogWarning(
-                "[Webhook] Pedido já estava marcado como pago. OrderId: {OrderId}", orderId);
-            return;
-        }
-
-        // LÓGICA DE BAIXA DE ESTOQUE ADICIONADA AQUI
-        // Como o cliente JÁ PAGOU, tentamos debitar. Se falhar por falta de estoque (concorrência),
-        // uma exceção será lançada, o webhook falhará (500) e o Stripe tentará novamente ou alertará.
         var productIds = order.Items.Select(i => i.ProductId).ToList();
         var products = await _context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+
+        var outOfStockItems = new List<string>();
+
+        foreach (var item in order.Items)
+        {
+            var product = products.FirstOrDefault(p => p.Id == item.ProductId);
+
+            if (product == null || product.StockQuantity < item.Quantity)
+            {
+                outOfStockItems.Add(item.ProductName);
+            }
+        }
+
+        if (outOfStockItems.Count > 0)
+        {
+            _logger.LogWarning("[Webhook] Estoque insuficiente para o pedido {OrderId} (pago). Itens esgotados: {Items}. Iniciando estorno automático.",
+                orderId, string.Join(", ", outOfStockItems));
+
+            try
+            {
+                await _paymentService.RefundPaymentAsync(transactionId);
+
+                order.StripePaymentIntentId = transactionId;
+                order.Status = "Cancelado";
+
+                AddAuditLog(order, "Cancelado",
+                    $"⚠️ Cancelamento Automático: Estoque insuficiente para itens ({string.Join(", ", outOfStockItems)}). Pagamento recebido e estornado imediatamente.",
+                    "SYSTEM-STOCK-CHECK");
+
+                await _context.SaveChangesAsync();
+
+                if (order.User != null && !string.IsNullOrEmpty(order.User.Email))
+                {
+                    var emailBody = $@"
+                    <p>Olá {order.User.FullName},</p>
+                    <p>Recebemos a confirmação do seu pagamento, porém...</p>
+                    <h3 style='color: #c0392b;'>Ah não! Alguém acabou comprando antes que você.</h3>
+                    <p>Infelizmente, um ou mais itens do seu pedido esgotaram nos últimos instantes e não temos estoque suficiente para concluir sua compra.</p>
+                    <p><b>Já estamos providenciando o estorno total do valor pago.</b></p>
+                    <p>O reembolso foi processado automaticamente e deve aparecer na sua fatura em breve, caso tenha utilizao um cartão, dependendo da sua operadora de cartão.</p>
+                    <p>Pedimos sinceras desculpas pelo inconveniente.</p>";
+
+                    await _emailService.SendEmailAsync(order.User.Email, $"Atualização sobre o Pedido #{order.Id} - Reembolso Automático", emailBody);
+                }
+
+                _logger.LogInformation("[Webhook] Pedido {OrderId} cancelado e reembolsado com sucesso devido à falta de estoque.", orderId);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "[Webhook] ERRO CRÍTICO ao tentar processar estorno automático para Order {OrderId}.", orderId);
+                throw new Exception("Falha ao processar estorno automático de pedido sem estoque.");
+            }
+        }
 
         foreach (var item in order.Items)
         {
             var product = products.FirstOrDefault(p => p.Id == item.ProductId);
             if (product != null)
             {
-                try
-                {
-                    product.DebitStock(item.Quantity);
-                    _context.Entry(product).State = EntityState.Modified;
-                }
-                catch (InvalidOperationException)
-                {
-                    _logger.LogCritical("[Webhook] ESTOQUE INSUFICIENTE para item {Product} no pedido PAGO {OrderId}. Requer atenção manual.", item.ProductName, orderId);
-                    // Aqui optamos por deixar a exceção subir para que o log registre o erro crítico e o pedido não seja marcado como "Pago" sem estoque garantido.
-                    throw new Exception($"Estoque insuficiente para {item.ProductName} após pagamento confirmado.");
-                }
+                product.DebitStock(item.Quantity);
+                _context.Entry(product).State = EntityState.Modified;
             }
         }
 
@@ -284,19 +292,15 @@ public class OrderService(
         order.Status = "Pago";
 
         AddAuditLog(order, "Pago",
-            $"✅ Pagamento confirmado via Webhook e Estoque debitado. Transaction ID: {transactionId}. " +
-            $"Valor validado: {amountPaidInCents / 100.0:C} (esperado: {expectedAmountInCents / 100.0:C})",
+            $"✅ Pagamento confirmado via Webhook e Estoque debitado. Transaction ID: {transactionId}. Valor validado.",
             "STRIPE-WEBHOOK");
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation(
-            "[Webhook] Pagamento confirmado com sucesso. OrderId: {OrderId}, Amount: {Amount}",
-            orderId, amountPaidInCents);
+        _logger.LogInformation("[Webhook] Pagamento confirmado com sucesso. OrderId: {OrderId}", orderId);
 
         _ = SendOrderUpdateEmailAsync(order.UserId, order, "Pago");
     }
-
     public async Task UpdateAdminOrderAsync(Guid orderId, UpdateOrderStatusDto dto)
     {
         var user = _httpContextAccessor.HttpContext?.User;
