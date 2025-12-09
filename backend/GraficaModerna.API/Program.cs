@@ -77,7 +77,16 @@ builder.Services.AddHttpClient("MelhorEnvio", client =>
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     client.DefaultRequestHeaders.UserAgent.ParseAdd(melhorEnvioUserAgent);
     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", melhorEnvioToken);
-});
+})
+.AddStandardResilienceHandler(options =>
+ {
+
+     options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10);
+     options.Retry.MaxRetryAttempts = 3;
+     options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(20);
+     options.CircuitBreaker.FailureRatio = 0.5;
+     options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+ });
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -190,7 +199,16 @@ builder.Services.Configure<PepperSettings>(o =>
     o.Peppers = new Dictionary<string, string> { { "v1", pepperV1 } };
 });
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredLength = 8;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+})
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
@@ -198,19 +216,39 @@ builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PepperedPasswordHas
 
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(o =>
+builder.Services.AddAuthentication(options =>
 {
-    o.TokenValidationParameters = new TokenValidationParameters
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+    .AddJwtBearer(options =>
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ValidateIssuer = false,
-        ValidateAudience = false,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero
-    };
-});
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context => { return Task.CompletedTask; },
+            OnTokenValidated = async context =>
+            {
+                var blacklistService = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
+                if (context.SecurityToken is JwtSecurityToken jwtToken)
+                    if (await blacklistService.IsTokenBlacklistedAsync(jwtToken.RawData))
+                        context.Fail("Token revogado.");
+            }
+        };
+    });
 
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICartRepository, CartRepository>();
@@ -255,8 +293,31 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Grafica API v1");
+        c.RoutePrefix = "swagger";
+    });
 }
+
+app.UseForwardedHeaders();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Content-Security-Policy",
+        "default-src 'self'; " +
+        "img-src 'self' data: https:; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "font-src 'self'; " +
+        "object-src 'none'; " +
+        "frame-ancestors 'none';");
+    await next();
+});
 
 app.UseMiddleware<ExceptionMiddleware>();
 
@@ -267,6 +328,32 @@ app.UseAuthorization();
 app.MapControllers();
 app.Run();
 
+internal static class SanitizerRules
+{
+    public static readonly string[] AllowedTags =
+    [
+        "p", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr",
+        "b", "strong", "i", "em", "u", "s", "strike", "sub", "sup",
+        "div", "span", "blockquote", "pre", "code",
+        "ul", "ol", "li", "dl", "dt", "dd",
+        "table", "thead", "tbody", "tfoot", "tr", "th", "td",
+        "a", "img"
+    ];
+
+    public static readonly string[] AllowedAttributes =
+    [
+        "class", "id", "style", "title", "alt",
+        "href", "target", "rel",
+        "src", "width", "height",
+        "colspan", "rowspan", "align", "valign"
+    ];
+
+    public static readonly string[] AllowedCssProperties =
+    [
+        "text-align", "padding", "margin", "color", "background-color",
+        "font-size", "font-weight", "text-decoration", "width", "height"
+    ];
+}
 static class Env
 {
     public static string Required(string name, int? minLength = null)
