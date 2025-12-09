@@ -11,7 +11,7 @@ export const CartProvider = ({ children }) => {
   const { user } = useAuth();
 
   const fetchCart = async () => {
-    if (!user) {
+    if (!user || user.role === 'Admin') {
         setCart({ items: [], totalAmount: 0 });
         return;
     }

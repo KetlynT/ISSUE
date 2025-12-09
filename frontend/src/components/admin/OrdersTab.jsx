@@ -122,7 +122,7 @@ const OrdersTab = () => {
                         <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                         <input 
                             className="pl-10 pr-4 py-2 border rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Buscar ID, Nome, CPF ou Email..."
+                            placeholder="Buscar ID, Nome, CPF/CNPJ ou Email..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -132,7 +132,7 @@ const OrdersTab = () => {
                         value={statusFilter}
                         onChange={e => setStatusFilter(e.target.value)}
                     >
-                        <option value="Todos">Todos Status</option>
+                        <option value="Todos">Todos os Status</option>
                         <option value="Pendente">Pendente</option>
                         <option value="Pago">Pago</option>
                         <option value="Enviado">Enviado</option>
@@ -141,6 +141,7 @@ const OrdersTab = () => {
                         <option value="Reembolso Solicitado">Reembolso Solicitado</option>
                         <option value="Aguardando Devolução">Aguardando Devolução</option>
                         <option value="Reembolsado">Reembolsado</option>
+                        <option value="Reembolso Reprovado">Reembolso Reprovado</option>
                     </select>
                 </div>
             </div>

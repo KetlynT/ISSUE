@@ -33,8 +33,11 @@ public class DashboardController(AppDbContext context) : ControllerBase
             .OrderBy(p => p.StockQuantity).Take(5).ToListAsync();
 
         var recentOrders = await _context.Orders
+            .Include(o => o.User)
             .OrderByDescending(o => o.OrderDate).Take(5)
-            .Select(o => new { o.Id, o.TotalAmount, o.Status, Date = o.OrderDate }).ToListAsync();
+            .Select(o => new { o.Id, o.TotalAmount, o.Status, Date = o.OrderDate, 
+            CustomerName = o.User != null ? o.User.FullName : "Cliente Desconhecido", 
+            CustomerEmail = o.User != null ? o.User.Email : "" }).ToListAsync();
 
         return Ok(new { totalOrders, totalRevenue, totalRefunded, pendingOrders, lowStockProducts, recentOrders });
     }

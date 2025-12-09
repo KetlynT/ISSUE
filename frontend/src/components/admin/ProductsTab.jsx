@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ProductService } from '../../services/productService';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
-import { Search, Eye, X, Settings, RefreshCcw } from 'lucide-react';
+import { Search, ArrowUpDown, Edit, Trash2 } from 'lucide-react';
 
 const ProductsTab = () => {
   const [products, setProducts] = useState([]);
