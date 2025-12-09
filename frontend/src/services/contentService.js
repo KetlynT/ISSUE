@@ -23,15 +23,16 @@ export const ContentService = {
   },
 
   // Pega todas as configurações (Público/Admin)
-  getSettings: async () => {
-    try {
-      const response = await api.get('/content/settings');
-      return response.data;
-    } catch (error) {
-      console.error("Erro ao carregar configurações", error);
-      return {};
-    }
-  },
+getSettings: async () => {
+  try {
+    const response = await api.get('/content/settings');
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao carregar configurações", error);
+    // REMOVA O 'return {};' ou relance o erro para que a Home saiba que falhou
+    throw error; 
+  }
+},
 
   // Salva configurações em lote (Admin)
   saveSettings: async (settingsDict) => {

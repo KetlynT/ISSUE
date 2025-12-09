@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
 import { ProductCard } from '../components/ProductCard';
 import { Button } from '../components/ui/Button';
 import { Search, Printer, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 export const Home = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalItems: 0 });
   const [loading, setLoading] = useState(true);
@@ -36,8 +38,11 @@ export const Home = () => {
   useEffect(() => {
     ContentService.getSettings().then(data => {
       if (data) setSettings(prev => ({...prev, ...data}));
-    });
-  }, []);
+    }).catch(err => {
+        console.error(err);
+        navigate('/error'); 
+      });
+  }, [navigate]);
 
   const loadProducts = async (page) => {
     setLoading(true);
@@ -58,6 +63,7 @@ export const Home = () => {
       setInputPage(data.page); 
     } catch (error) {
       console.error("Erro ao carregar catálogo:", error);
+      navigate('/error');
     } finally {
       setLoading(false);
       setIsFirstLoad(false); 
