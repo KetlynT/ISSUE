@@ -37,9 +37,6 @@ public class AuthController(
         { token = result.AccessToken, result.Email, result.Role, message = "Cadastro realizado com sucesso." });
     }
 
-    /// <summary>
-    /// Login para USUÁRIOS CLIENTES - Apenas usuários com role "User" podem fazer login aqui
-    /// </summary>
     [EnableRateLimiting("AuthPolicy")]
     [HttpPost("login")]
     public async Task<ActionResult> Login(LoginDto dto)
@@ -62,9 +59,6 @@ public class AuthController(
         { token = result.AccessToken, result.Email, result.Role, message = "Login realizado com sucesso." });
     }
 
-    /// <summary>
-    /// Login para ADMINISTRADORES - Apenas usuários com role "Admin" podem fazer login aqui
-    /// </summary>
     [EnableRateLimiting("AuthPolicy")]
     [HttpPost("admin/login")]
     public async Task<ActionResult> AdminLogin(LoginDto dto)
@@ -155,15 +149,13 @@ public class AuthController(
         try
         {
             var result = await _authService.RefreshTokenAsync(tokenModel);
-            return Ok(result);
+            return Ok(new { token = result.AccessToken, refreshToken = result.RefreshToken, result.Email, result.Role });
         }
         catch (Exception ex)
         {
             return BadRequest(ex.Message);
         }
     }
-
-    // --- NOVOS ENDPOINTS (EMAIL) ---
 
     [HttpPost("confirm-email")]
     [AllowAnonymous]

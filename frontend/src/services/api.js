@@ -23,21 +23,29 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      const token = localStorage.getItem('access_token');
-      // Só limpa e redireciona se já existia um token (sessão expirou)
-      if (token) {
-        localStorage.removeItem('access_token');
-        const isAuthRoute = error.config.url.includes('/login') || error.config.url.includes('/auth');
-        if (!isAuthRoute) {
-            // Opcional: Redirecionar para login ou apenas limpar estado
-            window.location.href = '/login';
-        }
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      const isAuthRoute = originalRequest.url.includes('/login') || originalRequest.url.includes('/auth/register');
+      
+      if (isAuthRoute) {
+        return Promise.reject(error);
+      }
+
+      originalRequest._retry = true;
+
+      try {
+        const newToken = await authService.refreshToken();
+        api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        await authService.logout();
+        return Promise.reject(refreshError);
       }
     }
     return Promise.reject(error);
   }
 );
-
 export default api;
