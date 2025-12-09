@@ -11,6 +11,11 @@ export const ContentService = {
     }
   },
 
+  createPage: async (data) => {
+    const response = await api.post('/content', data);
+    return response.data;
+  },
+
   // Pega lista de todas as páginas (Admin)
   getAllPages: async () => {
     const response = await api.get('/content/pages');
@@ -23,15 +28,14 @@ export const ContentService = {
   },
 
   // Pega todas as configurações (Público/Admin)
-getSettings: async () => {
-  try {
-    const response = await api.get('/content/settings');
-    return response.data;
-  } catch (error) {
-    console.error("Erro ao carregar configurações", error);
-    // REMOVA O 'return {};' ou relance o erro para que a Home saiba que falhou
-    throw error; 
-  }
+  getSettings: async () => {
+    try {
+      const response = await api.get('/content/settings');
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao carregar configurações", error);
+      throw error; 
+    }
 },
 
   // Salva configurações em lote (Admin)

@@ -11,22 +11,54 @@ const PagesTab = () => {
     const [selectedPage, setSelectedPage] = useState(null);
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => { ContentService.getAllPages().then(setPages); }, []);
+    useEffect(() => { loadPages(); }, []);
+
+    const loadPages = () => {
+        ContentService.getAllPages().then(setPages);
+    };
 
     const handleEdit = async (page) => {
-        const fullPage = await ContentService.getPage(page.slug);
-        setSelectedPage(fullPage);
+        setLoading(true);
+        try {
+            const fullPage = await ContentService.getPage(page.slug);
+            setSelectedPage(fullPage);
+        } catch (error) {
+            toast.error("Erro ao carregar detalhes da página.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreateNew = () => {
+        setSelectedPage({
+            title: '',
+            slug: '',
+            content: ''
+        });
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
+        
+        if (!selectedPage.title || !selectedPage.slug) {
+            toast.error("Título e Slug são obrigatórios.");
+            return;
+        }
+
         setLoading(true);
         try {
-            await ContentService.updatePage(selectedPage.id, selectedPage);
-            toast.success("Página salva!");
-            ContentService.getAllPages().then(setPages);
+            if (selectedPage.id) {
+                await ContentService.updatePage(selectedPage.slug, selectedPage);
+                toast.success("Página atualizada com sucesso!");
+            } else {
+                await ContentService.createPage(selectedPage);
+                toast.success("Página criada com sucesso!");
+                setSelectedPage(null); 
+            }
+            loadPages();
         } catch(e) {
-            toast.error("Erro ao salvar página.");
+            console.error(e);
+            toast.error("Erro ao salvar página. Verifique se o slug já existe.");
         } finally {
             setLoading(false);
         }
@@ -37,7 +69,16 @@ const PagesTab = () => {
     return (
         <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white rounded-lg shadow border p-4 h-fit">
-                <h3 className="font-bold border-b pb-2 mb-2 text-gray-700">Selecione uma Página</h3>
+                <div className="flex justify-between items-center border-b pb-2 mb-2">
+                    <h3 className="font-bold text-gray-700">Páginas</h3>
+                    <button 
+                        onClick={handleCreateNew}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 transition"
+                    >
+                        + Nova
+                    </button>
+                </div>
+                
                 {pages.map(p => (
                     <div key={p.id} onClick={() => handleEdit(p)} className={`p-3 cursor-pointer border-b last:border-0 rounded transition-colors ${selectedPage?.id === p.id ? 'bg-blue-50 text-blue-700 border-blue-200' : 'hover:bg-gray-50'}`}>
                         <div className="font-medium">{p.title}</div>
@@ -49,15 +90,51 @@ const PagesTab = () => {
             <div className="md:col-span-2 bg-white rounded-lg shadow border p-6">
                 {selectedPage ? (
                     <form onSubmit={handleSave} className="space-y-6">
-                        <InputGroup label="Título da Página" name="title" value={selectedPage.title} onChange={e => setSelectedPage({...selectedPage, title: e.target.value})} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <InputGroup 
+                                label="Título da Página" 
+                                name="title" 
+                                value={selectedPage.title} 
+                                onChange={e => setSelectedPage({...selectedPage, title: e.target.value})} 
+                            />
+                            <InputGroup 
+                                label="Slug (URL)" 
+                                name="slug" 
+                                value={selectedPage.slug} 
+                                placeholder="ex: politica-de-troca"
+                                // Opcional: Bloquear edição do slug em páginas existentes para evitar quebra de links
+                                // readOnly={!!selectedPage.id} 
+                                onChange={e => setSelectedPage({...selectedPage, slug: e.target.value})} 
+                            />
+                        </div>
+
                         <div>
                             <label className="block text-sm font-bold mb-2 text-gray-700">Conteúdo</label>
-                            <ReactQuill theme="snow" value={selectedPage.content} onChange={(value) => setSelectedPage({...selectedPage, content: value})} modules={modules} className="h-64 mb-12" />
+                            <ReactQuill 
+                                theme="snow" 
+                                value={selectedPage.content} 
+                                onChange={(value) => setSelectedPage({...selectedPage, content: value})} 
+                                modules={modules} 
+                                className="h-64 mb-12" 
+                            />
                         </div>
-                        <div className="pt-4"><Button type="submit" isLoading={loading}>Salvar Alterações</Button></div>
+                        <div className="pt-4 flex gap-2">
+                            <Button type="submit" isLoading={loading}>
+                                {selectedPage.id ? 'Salvar Alterações' : 'Criar Página'}
+                            </Button>
+                            {selectedPage.id && (
+                                <Button type="button" variant="outline" onClick={handleCreateNew}>
+                                    Cancelar / Nova
+                                </Button>
+                            )}
+                        </div>
                     </form>
                 ) : (
-                    <div className="text-center text-gray-400 py-20">Selecione uma página para editar.</div>
+                    <div className="text-center text-gray-400 py-20">
+                        <p>Selecione uma página para editar</p>
+                        <p>ou</p>
+                        <button onClick={handleCreateNew} className="text-blue-600 hover:underline mt-2">Criar nova página</button>
+                    </div>
                 )}
             </div>
         </div>

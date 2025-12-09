@@ -257,9 +257,10 @@ public class AuthService(
         await _userManager.UpdateAsync(user);
 
         var roles = await _userManager.GetRolesAsync(user);
+        var role = roles.FirstOrDefault() ?? "User";
 
         return new AuthResponseDto(new JwtSecurityTokenHandler().WriteToken(accessToken), refreshToken, user.Email!,
-            Role = "User";
+            role);
     }
 
     private JwtSecurityToken GenerateAccessToken(ApplicationUser user)

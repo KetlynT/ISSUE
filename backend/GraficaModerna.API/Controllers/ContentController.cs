@@ -47,12 +47,6 @@ public class ContentController(IContentService service, IHtmlSanitizer sanitizer
     }
 
     [HttpGet("pages/{slug}")]
-    public async Task<IActionResult> GetPageExplicit(string slug)
-    {
-        return await GetPage(slug);
-    }
-
-    [HttpGet("{slug}")]
     public async Task<IActionResult> GetPage(string slug)
     {
         
