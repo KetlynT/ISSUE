@@ -1,20 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { ProductService } from '../services/productService';
+import { useEffect, useState } from 'react';
 import { ContentService } from '../services/contentService';
-import { CartService } from '../services/cartService';
-import { DashboardService } from '../services/dashboardService';
-import { CouponService } from '../services/couponService';
-import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
-import { 
-  LogOut, Edit, Trash2, Package, Settings, FileText, 
-  Box, Truck, BarChart2, AlertTriangle, DollarSign, 
-  ShoppingBag, Tag, Search, Eye, X, RefreshCcw, ArrowUp, ArrowDown, ArrowUpDown 
-} from 'lucide-react';
+import { LogOut, Package, Settings, FileText, Truck, BarChart2, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAuth } from '../context/AuthContext';
+import OverviewTab from '../components/admin/OverviewTab';
+import ProductsTab from '../components/admin/ProductsTab';
+import OrdersTab from '../components/admin/OrdersTab';
+import CouponsTab from '../components/admin/CouponsTab';
+import SettingsTab from '../components/admin/SettingsTab';
+import PagesTab from '../components/admin/PagesTab';
 
 export const AdminDashboard = () => {
   const [logoUrl, setLogoUrl] = useState('');
@@ -128,16 +124,6 @@ const TabButton = ({ active, onClick, children, icon }) => (
     >
         {icon} {children}
     </button>
-);
-
-const InputGroup = ({ label, name, value, onChange, type = "text", placeholder }) => (
-    <div>
-        <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
-        <input 
-            type={type} name={name} value={value || ''} onChange={onChange} placeholder={placeholder}
-            className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors"
-        />
-    </div>
 );
 
 const OrderStatusBadge = ({ status }) => {

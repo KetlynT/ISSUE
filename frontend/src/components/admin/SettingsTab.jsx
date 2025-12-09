@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { ProductService } from '../../services/productService';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
+import { ContentService } from '../../services/contentService';
+import { InputGroup } from '../ui/InputGroup';
 
 const SettingsTab = () => {
     const [formData, setFormData] = useState({});

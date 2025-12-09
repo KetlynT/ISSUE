@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
+import { CouponService } from '../../services/couponService';
+import { Trash2 } from 'lucide-react';
 
 const CouponsTab = () => {
     const [coupons, setCoupons] = useState([]);
