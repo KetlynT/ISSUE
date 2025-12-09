@@ -35,7 +35,6 @@ public class OrdersController(IOrderService orderService, IContentService conten
                 userId,
                 dto.Address,
                 dto.CouponCode,
-                decimal ShippingCost,
                 dto.ShippingMethod
             );
 
@@ -79,6 +78,5 @@ public class CheckoutDto
 {
     public required CreateAddressDto Address { get; set; }
     public string? CouponCode { get; set; }
-    public decimal ShippingCost { get; set; }
     public required string ShippingMethod { get; set; }
 }

@@ -3,10 +3,10 @@ import api from './api';
 export const OrderService = {
   // --- Cliente ---
   checkout: async (checkoutData) => {
-    const response = await api.post('/cart/checkout', checkoutData);
+    const response = await api.post('/orders', checkoutData);
     return response.data;
   },
-  
+
   getMyOrders: async () => {
     const response = await api.get('/orders');
     return response.data;
