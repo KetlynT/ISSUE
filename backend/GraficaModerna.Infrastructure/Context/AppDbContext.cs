@@ -61,11 +61,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 
         // Configurações de Coupon
         builder.Entity<Coupon>().Property(c => c.DiscountPercentage).HasColumnType("decimal(5,2)");
-        // Índice único para busca rápida e validação de código de cupom
+
         builder.Entity<Coupon>()
             .HasIndex(c => c.Code)
             .IsUnique()
             .HasDatabaseName("IX_Coupon_Code");
+
+        builder.Entity<Coupon>()
+            .ToTable(t => t.HasCheckConstraint(
+            "CK_Coupon_DiscountPercentage",
+            "\"DiscountPercentage\" > 0 AND \"DiscountPercentage\" <= 100"));
+
+        builder.Entity<CouponUsage>()
+            .HasIndex(cu => new { cu.UserId, cu.CouponCode })
+            .IsUnique()
+            .HasDatabaseName("IX_CouponUsage_UserId_CouponCode");
 
         builder.Entity<Order>()
             .HasMany(o => o.History)

@@ -169,7 +169,7 @@ public class CartService : ICartService
             try
             {
                 var cart = await GetOrCreateCart(userId);
-                var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId) 
+                var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId && i.Cart.UserId == userId);
                     ?? throw new InvalidOperationException("Item não encontrado no carrinho.");
 
                 var product = await _context.Products

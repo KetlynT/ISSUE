@@ -342,13 +342,13 @@ public class OrderService : IOrderService
             auditMessage += ". Justificativa e provas anexadas.";
         }
 
-        if (dto.Status == "Reembolsado" || dto.Status == "Cancelado")
-            if (!string.IsNullOrEmpty(order.StripePaymentIntentId))
+        if ((dto.Status == "Reembolsado" || dto.Status == "Cancelado")
+            && order.Status != "Reembolsado"
+            && !string.IsNullOrEmpty(order.StripePaymentIntentId))
                 try
                 {
                     await _paymentService.RefundPaymentAsync(order.StripePaymentIntentId);
                     auditMessage += ". Reembolso processado no Stripe.";
-                    // Nota: Se cancelado, idealmente deveríamos devolver o estoque, mas isso depende da regra de negócio de cancelamento.
                 }
                 catch (Exception ex)
                 {

@@ -100,31 +100,6 @@ public class CartController(ICartService cartService, IOrderService orderService
             return BadRequest(new { message = ex.Message });
         }
     }
-
-    [HttpPost("checkout")]
-    public async Task<ActionResult<OrderDto>> Checkout([FromBody] CheckoutRequest request)
-    {
-        try
-        {
-            await CheckPurchaseEnabled();
-
-            if (string.IsNullOrEmpty(request.Address.ZipCode) || string.IsNullOrEmpty(request.Address.Street))
-                return BadRequest("Endereço de entrega inválido.");
-
-            var order = await _orderService.CreateOrderFromCartAsync(
-                GetUserId(),
-                request.Address,
-                request.CouponCode,
-                request.ShippingMethod
-            );
-
-            return Ok(order);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
 }
 
 public record CheckoutRequest(
