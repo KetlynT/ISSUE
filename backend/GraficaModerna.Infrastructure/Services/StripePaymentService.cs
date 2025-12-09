@@ -44,8 +44,13 @@ public class StripePaymentService : IPaymentService
             var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
             var cancelUrl = $"{frontendUrl}/meus-pedidos";
 
-            var (encryptedOrder, signature) = _securityService.Protect(order.Id.ToString());
+            // CORREÇÃO: MetadataSecurityService.Protect retorna apenas uma string.
+            // O algoritmo AES-GCM inclui a Tag de autenticação no próprio payload, 
+            // garantindo a integridade sem precisar de um campo "sig" separado.
+            var encryptedOrder = _securityService.Protect(order.Id.ToString());
 
+            // A string gerada tem ~88 caracteres (Base64 de ~64 bytes), 
+            // bem abaixo do limite de 500 caracteres do Stripe.
             var options = new SessionCreateOptions
             {
                 Mode = "payment",
@@ -53,8 +58,7 @@ public class StripePaymentService : IPaymentService
                 CancelUrl = cancelUrl,
                 Metadata = new Dictionary<string, string>
                 {
-                    { "order_data", encryptedOrder },
-                    { "sig", signature }
+                    { "order_data", encryptedOrder }
                 },
                 LineItems = []
             };

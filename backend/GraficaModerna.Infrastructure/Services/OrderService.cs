@@ -82,11 +82,13 @@ public class OrderService : IOrderService
             {
                 if (item.Product == null) continue;
 
+                // Mantém a verificação inicial para não deixar comprar algo já esgotado,
+                // mas NÃO debita o estoque aqui.
                 if (item.Product.StockQuantity < item.Quantity)
                     throw new Exception($"Estoque insuficiente para o produto {item.Product.Name}");
 
-                item.Product.DebitStock(item.Quantity);
-                _context.Entry(item.Product).State = EntityState.Modified;
+                // item.Product.DebitStock(item.Quantity); // REMOVIDO: Só debita ao pagar
+                // _context.Entry(item.Product).State = EntityState.Modified; // REMOVIDO
 
                 subTotal += item.Quantity * item.Product.Price;
 
@@ -173,7 +175,8 @@ public class OrderService : IOrderService
 
             _ = SendOrderReceivedEmailAsync(userId, order.Id);
 
-            return MapToDto(order);
+            // Adicionado o aviso sobre a reserva de estoque
+            return MapToDto(order, "Atenção: A reserva dos itens e o débito no estoque só ocorrem após a confirmação do pagamento.");
         }
         catch
         {
@@ -191,7 +194,7 @@ public class OrderService : IOrderService
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
-        return orders.Select(MapToDto).ToList();
+        return orders.Select(o => MapToDto(o)).ToList();
     }
 
     public async Task<List<AdminOrderDto>> GetAllOrdersAsync()
@@ -222,6 +225,7 @@ public class OrderService : IOrderService
         var order = await _context.Orders
             .Include(o => o.History)
             .Include(o => o.User)
+            .Include(o => o.Items) // Importante: Incluir os itens para dar baixa no estoque
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
         if (order == null)
@@ -262,11 +266,36 @@ public class OrderService : IOrderService
             return;
         }
 
+        // LÓGICA DE BAIXA DE ESTOQUE ADICIONADA AQUI
+        // Como o cliente JÁ PAGOU, tentamos debitar. Se falhar por falta de estoque (concorrência),
+        // uma exceção será lançada, o webhook falhará (500) e o Stripe tentará novamente ou alertará.
+        var productIds = order.Items.Select(i => i.ProductId).ToList();
+        var products = await _context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+
+        foreach (var item in order.Items)
+        {
+            var product = products.FirstOrDefault(p => p.Id == item.ProductId);
+            if (product != null)
+            {
+                try
+                {
+                    product.DebitStock(item.Quantity);
+                    _context.Entry(product).State = EntityState.Modified;
+                }
+                catch (InvalidOperationException)
+                {
+                    _logger.LogCritical("[Webhook] ESTOQUE INSUFICIENTE para item {Product} no pedido PAGO {OrderId}. Requer atenção manual.", item.ProductName, orderId);
+                    // Aqui optamos por deixar a exceção subir para que o log registre o erro crítico e o pedido não seja marcado como "Pago" sem estoque garantido.
+                    throw new Exception($"Estoque insuficiente para {item.ProductName} após pagamento confirmado.");
+                }
+            }
+        }
+
         order.StripePaymentIntentId = transactionId;
         order.Status = "Pago";
 
         AddAuditLog(order, "Pago",
-            $"✅ Pagamento confirmado via Webhook. Transaction ID: {transactionId}. " +
+            $"✅ Pagamento confirmado via Webhook e Estoque debitado. Transaction ID: {transactionId}. " +
             $"Valor validado: {amountPaidInCents / 100.0:C} (esperado: {expectedAmountInCents / 100.0:C})",
             "STRIPE-WEBHOOK");
 
@@ -319,6 +348,7 @@ public class OrderService : IOrderService
                 {
                     await _paymentService.RefundPaymentAsync(order.StripePaymentIntentId);
                     auditMessage += ". Reembolso processado no Stripe.";
+                    // Nota: Se cancelado, idealmente deveríamos devolver o estoque, mas isso depende da regra de negócio de cancelamento.
                 }
                 catch (Exception ex)
                 {
@@ -515,7 +545,7 @@ public class OrderService : IOrderService
         }
     }
 
-    private static OrderDto MapToDto(Order order)
+    private static OrderDto MapToDto(Order order, string? paymentWarning = null)
     {
         return new OrderDto(
             order.Id,
@@ -535,7 +565,8 @@ public class OrderService : IOrderService
             order.User?.FullName ?? "Cliente",
             order.Items.Select(i =>
                 new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)
-            ).ToList()
+            ).ToList(),
+            paymentWarning
         );
     }
 

@@ -16,7 +16,6 @@ namespace GraficaModerna.API.Controllers;
 [EnableRateLimiting("WebhookPolicy")]
 public class StripeWebhookController : ControllerBase
 {
-    private readonly HashSet<string> _authorizedIps;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StripeWebhookController> _logger;
     private readonly IOrderService _orderService;
@@ -32,31 +31,13 @@ public class StripeWebhookController : ControllerBase
         _orderService = orderService;
         _logger = logger;
         _securityService = securityService;
-
-        var ipsString = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_IPS")
-                        ?? _configuration["STRIPE_WEBHOOK_IPS"];
-
-        if (!string.IsNullOrEmpty(ipsString))
-        {
-            var ips = ipsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            _authorizedIps = [.. ips];
-        }
-        else
-        {
-            _authorizedIps = [];
-            _logger.LogWarning("ALERTA: 'STRIPE_WEBHOOK_IPS' não configurado.");
-        }
     }
 
     [HttpPost("stripe")]
     public async Task<IActionResult> HandleStripeEvent()
     {
-        if (!IsRequestFromStripe(HttpContext.Connection.RemoteIpAddress))
-        {
-            _logger.LogWarning("[Webhook] Tentativa de acesso bloqueada de IP não autorizado: {IP}",
-                HttpContext.Connection.RemoteIpAddress);
-            return StatusCode(403, "Forbidden: Source Denied");
-        }
+        // REMOVIDO: Validação por IP. O Stripe recomenda validar apenas a assinatura (Stripe-Signature).
+        // IPs podem mudar sem aviso prévio, causando falsos positivos.
 
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
         var endpointSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET")
@@ -195,33 +176,5 @@ public class StripeWebhookController : ControllerBase
             _logger.LogError(e, "[Webhook] Erro interno ao processar webhook.");
             return StatusCode(500, "Internal server error");
         }
-    }
-
-    private bool IsRequestFromStripe(IPAddress? remoteIp)
-    {
-        if (remoteIp == null)
-        {
-            _logger.LogWarning("[Webhook] IP remoto é nulo");
-            return false;
-        }
-
-        if (IPAddress.IsLoopback(remoteIp))
-            return true;
-
-        if (_authorizedIps.Count == 0)
-        {
-            _logger.LogWarning("[Webhook] Lista de IPs autorizados está vazia. Bloqueando por segurança.");
-            return false;
-        }
-
-        var ip = remoteIp.MapToIPv4().ToString();
-        var isAuthorized = _authorizedIps.Contains(ip);
-
-        if (!isAuthorized)
-        {
-            _logger.LogWarning("[Webhook] IP não autorizado tentando acessar: {IP}", ip);
-        }
-
-        return isAuthorized;
     }
 }

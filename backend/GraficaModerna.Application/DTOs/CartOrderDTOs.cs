@@ -43,7 +43,8 @@ public record OrderDto(
     string? RefundRejectionProof,
     string ShippingAddress,
     string CustomerName, 
-    List<OrderItemDto> Items
+    List<OrderItemDto> Items,
+    string? PaymentWarning // Novo campo para o Toast
 );
 
 public record AdminOrderDto(
