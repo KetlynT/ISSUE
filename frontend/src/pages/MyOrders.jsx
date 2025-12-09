@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CartService } from '../services/cartService';
+import { useEffect, useState } from 'react';
+import { OrderService } from '../services/orderService';
 import { PaymentService } from '../services/paymentService'; 
 import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,7 +18,7 @@ export const MyOrders = () => {
 
   const loadOrders = async () => {
     try {
-      const data = await CartService.getMyOrders();
+      const data = await OrderService.getMyOrders();
       setOrders(data);
     } catch (error) {
       toast.error("Não foi possível carregar seus pedidos.");
@@ -49,7 +49,7 @@ export const MyOrders = () => {
     if (!selectedOrderForRefund) return;
     const loadingToast = toast.loading("Enviando solicitação...");
     try {
-        await CartService.requestRefund(selectedOrderForRefund);
+        await OrderService.requestRefund(selectedOrderForRefund);
         toast.success("Solicitação enviada!", { id: loadingToast });
         loadOrders();
     } catch (error) {
@@ -235,7 +235,7 @@ const StatusBadge = ({ status }) => {
         'Pendente': 'bg-yellow-100 text-yellow-800', 'Pago': 'bg-green-100 text-green-800', 'Enviado': 'bg-blue-100 text-blue-800',
         'Entregue': 'bg-gray-100 text-gray-800', 'Cancelado': 'bg-red-100 text-red-800', 
         'Reembolso Solicitado': 'bg-purple-100 text-purple-800', 'Aguardando Devolução': 'bg-orange-100 text-orange-800',
-        'Reembolsado': 'bg-gray-800 text-white'
+        'Reembolsado': 'bg-gray-800 text-white', 'Reembolso Reprovado': 'bg-red-200 text-red-900'
     };
     return <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${styles[status] || 'bg-gray-100'}`}>{status}</span>;
 };

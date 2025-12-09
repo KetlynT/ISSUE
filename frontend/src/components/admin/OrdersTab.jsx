@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CartService } from '../../services/cartService';
+import { OrderService } from '../../services/orderService';
 import { ProductService } from '../../services/productService';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
@@ -42,7 +42,7 @@ const OrdersTab = () => {
 
     const loadOrders = async () => {
         try {
-            const data = await CartService.getAllOrders();
+            const data = await OrderService.getAllOrders();
             setOrders(data);
         } catch (e) {
             toast.error("Erro ao carregar pedidos.");
@@ -84,7 +84,7 @@ const OrdersTab = () => {
         e.preventDefault();
         const toastId = toast.loading("Atualizando...");
         try {
-            await CartService.updateOrderStatus(selectedOrder.id, {
+            await OrderService.updateOrderStatus(selectedOrder.id, {
                 status: statusInput,
                 trackingCode: trackingInput,
                 reverseLogisticsCode: reverseCodeInput,
