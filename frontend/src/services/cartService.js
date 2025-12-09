@@ -21,9 +21,4 @@ export const CartService = {
   clearCart: async () => {
     await api.delete('/cart');
   },
-
-  checkout: async (checkoutData) => {
-    const response = await api.post('/cart/checkout', checkoutData);
-    return response.data;
-  }
 };

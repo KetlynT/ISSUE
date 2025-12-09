@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CartService } from '../services/cartService';
 import { AddressService } from '../services/addressService';
@@ -8,7 +8,7 @@ import { useCart } from '../context/CartContext';
 import { Button } from '../components/ui/Button';
 import { AddressManager } from '../components/AddressManager';
 import { CouponInput } from '../components/CouponInput';
-import { MapPin, Truck, CheckCircle, Settings, AlertCircle, Plus, CreditCard } from 'lucide-react';
+import { MapPin, Truck, CheckCircle, Settings, Plus, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const Checkout = () => {
