@@ -19,6 +19,9 @@ public enum OrderStatus
     [Description("Cancelado")]
     Cancelado,
 
+    [Description("Reembolso Solicitado")]
+    ReembolsoSolicitado,
+
     [Description("Aguardando Devolução")]
     AguardandoDevolucao,
 

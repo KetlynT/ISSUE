@@ -509,7 +509,7 @@ public class OrderService(
             order.RefundType = "Parcial";
             order.RefundRequestedAmount = calculatedRefundAmount;
 
-            AddAuditLog(order, order.Status,
+            AddAuditLog(order, OrderStatus.ReembolsoSolicitado,
                 $"Cliente solicitou reembolso PARCIAL de R$ {calculatedRefundAmount:F2}.", userId);
         }
         else
@@ -519,7 +519,7 @@ public class OrderService(
 
             foreach (var item in order.Items) item.RefundQuantity = item.Quantity;
 
-            AddAuditLog(order, order.Status,
+            AddAuditLog(order, OrderStatus.ReembolsoSolicitado,
                 "Cliente solicitou reembolso TOTAL.", userId);
         }
 
