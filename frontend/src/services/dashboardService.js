@@ -6,11 +6,11 @@ export const DashboardService = {
     return response.data;
   },
   getOrders: async (page = 1, pageSize = 10) => {
-    const response = await api.get(`/dashboard/orders?page=${page}&pageSize=${pageSize}`);
+    const response = await api.get(`/admin/orders?page=${page}&pageSize=${pageSize}`);
     return response.data;
   },
   updateOrderStatus: async (id, statusData) => {
-    const response = await api.patch(`/dashboard/orders/${id}/status`, statusData);
+    const response = await api.patch(`/admin/orders/${id}/status`, statusData);
     return response.data;
   }
 };
