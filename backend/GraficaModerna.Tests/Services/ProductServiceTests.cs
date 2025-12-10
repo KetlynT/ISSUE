@@ -179,4 +179,51 @@ public class ProductServiceTests
             Times.Once
         );
     }
+
+    [Fact]
+    public async Task GetCatalogAsync_ShouldCacheResults()
+    {
+        // Arrange
+        var products = new List<Product> { new("P1", "D", 10, "url", 1, 1, 1, 1, 10) };
+
+        _repositoryMock.Setup(r => r.GetAllAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((products, 1));
+
+        // Act
+        // Primeira chamada (deve ir ao repo)
+        await _service.GetCatalogAsync(null, null, null, 1, 10);
+
+        // Segunda chamada com mesmos parâmetros (deve pegar do cache - MemoryCache real foi instanciado no construtor)
+        await _service.GetCatalogAsync(null, null, null, 1, 10);
+
+        // Assert
+        // Verifica se o repositório foi chamado APENAS UMA VEZ
+        _repositoryMock.Verify(r => r.GetAllAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetCatalogAsync_DeveUsarCache_NaSegundaChamada()
+    {
+        // Arrange
+        var products = new List<Product> { new("Prod", "Desc", 10, "url", 1, 1, 1, 1, 10) };
+
+        // Configura o mock para retornar os produtos
+        _repositoryMock.Setup(r => r.GetAllAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((products, 1));
+
+        // Act
+        // 1ª Chamada: Deve ir ao repositório
+        await _service.GetCatalogAsync(null, null, null, 1, 10);
+
+        // 2ª Chamada: Deve pegar do Cache (mesmos parâmetros)
+        await _service.GetCatalogAsync(null, null, null, 1, 10);
+
+        // Assert
+        // Verifica se o método GetAllAsync do repositório foi chamado EXATAMENTE UMA VEZ
+        _repositoryMock.Verify(r => r.GetAllAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()),
+            Times.Once);
+    }
 }

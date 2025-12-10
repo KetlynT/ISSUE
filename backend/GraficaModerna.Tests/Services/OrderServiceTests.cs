@@ -134,4 +134,134 @@ public class OrderServiceTests
         Assert.Equal("Total", updated.RefundType);
         Assert.Equal(100m, updated.RefundRequestedAmount);
     }
+
+    [Fact]
+    public async Task ConfirmPaymentViaWebhookAsync_ShouldDetectFraud_WhenAmountMismatch()
+    {
+        // Arrange
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            UserId = "user1",
+            TotalAmount = 200.00m, // Esperado: 20000 centavos
+            Status = OrderStatus.Pendente
+        };
+
+        _context.Orders.Add(order);
+        await _context.SaveChangesAsync();
+
+        // Act & Assert
+        // Tentativa de pagar apenas 1 centavo num pedido de 200 reais
+        var ex = await Assert.ThrowsAsync<Exception>(() =>
+            _service.ConfirmPaymentViaWebhookAsync(order.Id, "txn_fraud", 1)); // 1 centavo
+
+        Assert.Contains("Divergência de valores", ex.Message);
+
+        // Verifica se o alerta de segurança foi enviado (email para admin)
+        _emailServiceMock.Verify(e => e.SendEmailAsync(
+            It.IsAny<string>(),
+            It.Is<string>(s => s.Contains("ALERTA DE SEGURANÇA")),
+            It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateOrderFromCartAsync_ShouldThrow_WhenCouponAlreadyUsed()
+    {
+        // Arrange
+        var userId = "user_coupon_abuser";
+        var product = new Product("P1", "D", 100m, "img", 1, 1, 1, 1, 10);
+        _context.Products.Add(product);
+
+        var cart = new Cart { UserId = userId };
+        cart.Items.Add(new CartItem { Product = product, ProductId = product.Id, Quantity = 1 });
+        _context.Carts.Add(cart);
+
+        var coupon = new Coupon("UNIQUETIME", 50, 10);
+        _context.Coupons.Add(coupon);
+
+        // Simula que o usuário JÁ usou este cupom antes
+        _context.CouponUsages.Add(new CouponUsage
+        {
+            UserId = userId,
+            CouponCode = "UNIQUETIME",
+            OrderId = Guid.NewGuid()
+        });
+
+        await _context.SaveChangesAsync();
+
+        var address = new CreateAddressDto("Casa", "Eu", "12345678", "Rua", "1", "", "Bairro", "Cidade", "UF", "", "1199999999", false);
+
+        _shippingServiceMock.Setup(s => s.CalculateAsync(It.IsAny<string>(), It.IsAny<List<ShippingItemDto>>()))
+            .ReturnsAsync([new() { Name = "Correios", Price = 10 }]);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<Exception>(() =>
+            _service.CreateOrderFromCartAsync(userId, address, "UNIQUETIME", "Correios"));
+
+        Assert.Equal("Cupom já utilizado.", ex.Message);
+    }
+
+    [Fact]
+    public async Task ConfirmPaymentViaWebhookAsync_DeveDetectarFraude_QuandoValorPagoForMenorQuePedido()
+    {
+        // Arrange
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            UserId = "user_fraude",
+            TotalAmount = 200.00m,
+            Status = OrderStatus.Pendente
+        };
+
+        _context.Orders.Add(order);
+        await _context.SaveChangesAsync();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<Exception>(() =>
+            _service.ConfirmPaymentViaWebhookAsync(order.Id, "txn_fraude_123", 1));
+
+        Assert.Contains("Divergência de valores", ex.Message);
+
+        _emailServiceMock.Verify(e => e.SendEmailAsync(
+            It.IsAny<string>(),
+            It.Is<string>(s => s.Contains("ALERTA DE SEGURANÇA")),
+            It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateOrderFromCartAsync_DeveImpedirUso_DeCupomJaUtilizadoPeloUsuario()
+    {
+        // Arrange
+        var userId = "user_cupom_duplicado";
+        var product = new Product("P1", "D", 100m, "img", 1, 1, 1, 1, 10);
+        _context.Products.Add(product);
+
+        var cart = new Cart { UserId = userId };
+        cart.Items.Add(new CartItem { Product = product, ProductId = product.Id, Quantity = 1 });
+        _context.Carts.Add(cart);
+
+        var coupon = new Coupon("PROMOUNIC", 50, 10);
+        _context.Coupons.Add(coupon);
+
+        _context.CouponUsages.Add(new CouponUsage
+        {
+            UserId = userId,
+            CouponCode = "PROMOUNIC",
+            OrderId = Guid.NewGuid()
+        });
+
+        await _context.SaveChangesAsync();
+
+        var address = new CreateAddressDto("Casa", "Eu", "12345678", "Rua", "1", "", "Bairro", "Cidade", "UF", "", "1199999999", false);
+
+        // CORREÇÃO IDE0028: Simplificação da lista de opções de frete
+        _shippingServiceMock.Setup(s => s.CalculateAsync(It.IsAny<string>(), It.IsAny<List<ShippingItemDto>>()))
+            .ReturnsAsync([new() { Name = "Sedex", Price = 10 }]);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<Exception>(() =>
+            _service.CreateOrderFromCartAsync(userId, address, "PROMOUNIC", "Sedex"));
+
+        Assert.Equal("Cupom já utilizado.", ex.Message);
+    }
 }
