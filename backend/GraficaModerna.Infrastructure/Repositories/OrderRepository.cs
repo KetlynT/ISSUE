@@ -1,4 +1,5 @@
-﻿using GraficaModerna.Domain.Entities;
+﻿using GraficaModerna.Domain.Models;
+using GraficaModerna.Domain.Entities;
 using GraficaModerna.Domain.Interfaces;
 using GraficaModerna.Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
@@ -22,24 +23,52 @@ public class OrderRepository(AppDbContext context) : IOrderRepository
             .FirstOrDefaultAsync(o => o.Id == id);
     }
 
-    public async Task<List<Order>> GetByUserIdAsync(string userId)
-    {
-        return await _context.Orders
-            .Include(o => o.Items)
-            .Include(o => o.User)
-            .Where(o => o.UserId == userId)
-            .OrderByDescending(o => o.OrderDate)
-            .ToListAsync();
-    }
+    public async Task<PagedResultDto<Order>> GetByUserIdAsync(string userId, int page, int pageSize)
+{
+    var query = _context.Orders
+        .Include(o => o.Items)
+        .Include(o => o.User)
+        .Where(o => o.UserId == userId)
+        .OrderByDescending(o => o.OrderDate);
 
-    public async Task<List<Order>> GetAllAsync()
+    var totalItems = await query.CountAsync();
+
+    var items = await query
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
+
+    return new PagedResultDto<Order>
     {
-        return await _context.Orders
-            .Include(o => o.Items)
-            .Include(o => o.User) // Inclui dados do usuário na listagem geral
-            .OrderByDescending(o => o.OrderDate)
-            .ToListAsync();
-    }
+        Items = items,
+        TotalItems = totalItems,
+        Page = page,
+        PageSize = pageSize
+    };
+}
+
+public async Task<PagedResultDto<Order>> GetAllAsync(int page, int pageSize)
+{
+    var query = _context.Orders
+        .Include(o => o.Items)
+        .Include(o => o.User)
+        .OrderByDescending(o => o.OrderDate);
+
+    var totalItems = await query.CountAsync();
+
+    var items = await query
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
+
+    return new PagedResultDto<Order>
+    {
+        Items = items,
+        TotalItems = totalItems,
+        Page = page,
+        PageSize = pageSize
+    };
+}
 
     public Task UpdateAsync(Order order)
     {

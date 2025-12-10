@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { OrderService } from '../services/orderService';
+import orderService from '../services/orderService';
 import { PaymentService } from '../services/paymentService'; 
-import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box } from 'lucide-react';
+import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
@@ -11,16 +11,20 @@ export const MyOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [selectedOrderForRefund, setSelectedOrderForRefund] = useState(null);
   const [isRefundLoading, setIsRefundLoading] = useState(false);
 
-  useEffect(() => { loadOrders(); }, []);
+  useEffect(() => { loadOrders(); }, [page]);
 
   const loadOrders = async () => {
     try {
-      const data = await OrderService.getMyOrders();
-      setOrders(data);
+      setLoading(true);
+      const data = await orderService.getMyOrders(page);
+      setOrders(data.items || []);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       toast.error("Não foi possível carregar seus pedidos.");
     } finally {
@@ -52,7 +56,7 @@ export const MyOrders = () => {
     setIsRefundLoading(true);
 
     try {
-        await OrderService.requestRefund(selectedOrderForRefund.id, payload);
+        await orderService.requestRefund(selectedOrderForRefund.id, payload);
         toast.success("Solicitação enviada com sucesso!", { id: loadingToast });
         await loadOrders();
         setSelectedOrderForRefund(null);
@@ -218,6 +222,28 @@ export const MyOrders = () => {
               </AnimatePresence>
             </motion.div>
           )})}
+          
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-gray-100">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 rounded-lg border bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <span className="text-sm font-medium text-gray-600">
+                  Página {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 rounded-lg border bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            )}
         </div>
       )}
       

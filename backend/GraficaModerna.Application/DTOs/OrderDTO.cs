@@ -52,7 +52,12 @@ public record OrderHistoryDto(
     DateTime Timestamp
 );
 
-public record OrderItemDto(string ProductName, int Quantity, decimal UnitPrice, decimal Total);
+public record OrderItemDto(
+    string ProductName, 
+    int Quantity,
+    int RefundQuantity,
+    decimal UnitPrice, 
+    decimal Total);
 
 public record UpdateOrderStatusDto(
     string Status,

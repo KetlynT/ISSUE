@@ -7,8 +7,8 @@ export const OrderService = {
     return response.data;
   },
 
-  getMyOrders: async () => {
-    const response = await api.get('/orders');
+  getMyOrders: async (page = 1, pageSize = 10) => {
+    const response = await api.get(`/orders?page=${page}&pageSize=${pageSize}`);
     return response.data;
   },
 
@@ -16,14 +16,4 @@ export const OrderService = {
     const response = await api.post(`/orders/${orderId}/request-refund`, refundData);
     return response.data;
   },
-
-  // --- Admin ---
-  getAllOrders: async () => {
-    const response = await api.get('/admin/orders');
-    return response.data;
-  },
-
-  updateOrderStatus: async (orderId, updateData) => {
-    await api.patch(`/admin/${orderId}/status`, updateData);
-  }
 };

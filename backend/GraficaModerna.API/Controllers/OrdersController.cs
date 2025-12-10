@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
+using GraficaModerna.Domain.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -46,25 +47,27 @@ public class OrdersController(IOrderService orderService, IContentService conten
         }
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetMyOrders()
+[HttpGet]
+    // Método atualizado para suportar paginação
+    public async Task<IActionResult> GetMyOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
-        var orders = await _orderService.GetUserOrdersAsync(userId);
-        return Ok(orders);
+        // Agora o controller reconhece o retorno PagedResultDto graças ao using
+        var pagedOrders = await _orderService.GetUserOrdersAsync(userId, page, pageSize);
+        return Ok(pagedOrders);
     }
 
     [HttpPost("{id}/request-refund")]
-    public async Task<IActionResult> RequestRefund(Guid id)
+    public async Task<IActionResult> RequestRefund(Guid id, [FromBody] RequestRefundDto dto)
     {
         try
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId)) return Unauthorized(new { message = "Usuário não autenticado." });
 
-            await _orderService.RequestRefundAsync(id, userId);
+            await _orderService.RequestRefundAsync(id, userId, dto);
             return Ok();
         }
         catch (Exception ex)

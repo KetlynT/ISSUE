@@ -2,6 +2,7 @@
 using GraficaModerna.Application.DTOs;
 using GraficaModerna.Application.Interfaces;
 using GraficaModerna.Domain.Entities;
+using GraficaModerna.Domain.Models;
 using GraficaModerna.Infrastructure.Context;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -89,7 +90,8 @@ public class OrderService(
             if (!string.IsNullOrWhiteSpace(couponCode))
             {
                 var coupon = await _context.Coupons.FirstOrDefaultAsync(c =>
-                    c.Code.Equals(couponCode, StringComparison.CurrentCultureIgnoreCase));
+                    c.Code.ToUpper() == couponCode.ToUpper());
+                
                 if (coupon != null && coupon.IsValid())
                 {
                     var alreadyUsed =
@@ -159,7 +161,6 @@ public class OrderService(
 
             _ = SendOrderReceivedEmailAsync(userId, order.Id);
 
-            // Adicionado o aviso sobre a reserva de estoque
             return MapToDto(order, "Atenção: A reserva dos itens e o débito no estoque só ocorrem após a confirmação do pagamento.");
         }
         catch
@@ -169,28 +170,56 @@ public class OrderService(
         }
     }
 
-    public async Task<List<OrderDto>> GetUserOrdersAsync(string userId)
+    public async Task<PagedResultDto<OrderDto>> GetUserOrdersAsync(string userId, int page, int pageSize)
     {
-        var orders = await _context.Orders
+        var query = _context.Orders
             .Where(o => o.UserId == userId)
             .Include(o => o.Items)
             .Include(o => o.User)
-            .OrderByDescending(o => o.OrderDate)
+            .OrderByDescending(o => o.OrderDate);
+
+        var totalItems = await query.CountAsync();
+
+        var orders = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return [.. orders.Select(o => MapToDto(o))];
+        var dtos = orders.Select(o => MapToDto(o));
+
+        return new PagedResultDto<OrderDto>
+        {
+            Items = dtos,
+            TotalItems = totalItems,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
-    public async Task<List<AdminOrderDto>> GetAllOrdersAsync()
+    public async Task<PagedResultDto<AdminOrderDto>> GetAllOrdersAsync(int page, int pageSize)
     {
-        var orders = await _context.Orders
+        var query = _context.Orders
             .Include(o => o.Items)
             .Include(o => o.User)
             .Include(o => o.History)
-            .OrderByDescending(o => o.OrderDate)
+            .OrderByDescending(o => o.OrderDate);
+
+        var totalItems = await query.CountAsync();
+
+        var orders = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return [.. orders.Select(MapToAdminDto)];
+        var dtos = orders.Select(MapToAdminDto);
+
+        return new PagedResultDto<AdminOrderDto>
+        {
+            Items = dtos,
+            TotalItems = totalItems,
+            Page = page,
+            PageSize = pageSize
+        };
     }
 
     public async Task ConfirmPaymentViaWebhookAsync(Guid orderId, string transactionId, long amountPaidInCents)
@@ -203,6 +232,7 @@ public class OrderService(
             _logger.LogWarning("[Webhook] Tentativa de reprocessamento detectada. Transaction: {TransactionId}", transactionId);
             return;
         }
+
         using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
         try
@@ -267,8 +297,7 @@ public class OrderService(
                     <h3 style='color: #c0392b;'>Ah não! Alguém acabou comprando antes que você.</h3>
                     <p>Infelizmente, um ou mais itens do seu pedido esgotaram nos últimos instantes e não temos estoque suficiente para concluir sua compra.</p>
                     <p><b>Já estamos providenciando o estorno total do valor pago.</b></p>
-                    <p>O reembolso foi processado automaticamente e deve aparecer na sua fatura em breve, caso tenha utilizao um cartão, dependendo da sua operadora de cartão.</p>
-                    <p>Pedimos sinceras desculpas pelo inconveniente.</p>";
+                    <p>O reembolso foi processado automaticamente e deve aparecer na sua fatura em breve.</p>";
 
                         await _emailService.SendEmailAsync(order.User.Email, $"Atualização sobre o Pedido #{order.Id} - Reembolso Automático", emailBody);
                     }
@@ -322,104 +351,114 @@ public class OrderService(
         if (user == null || !user.IsInRole("Admin"))
             throw new UnauthorizedAccessException("Apenas administradores podem alterar pedidos.");
 
-        var order = await _context.Orders
-            .Include(o => o.Items)
-            .Include(o => o.History)
-            .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido não encontrado");
-
-        var oldStatus = order.Status;
-        var auditMessage = $"Status alterado manualmente para {dto.Status}";
-
-        // --- 1. Lógica de Logística Reversa ---
-        if (dto.Status == "Aguardando Devolução")
+        using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        try
         {
-            if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode))
-                order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
+            var order = await _context.Orders
+                .Include(o => o.Items)
+                .Include(o => o.History)
+                .FirstOrDefaultAsync(o => o.Id == orderId) ?? throw new Exception("Pedido não encontrado");
 
-            order.ReturnInstructions = !string.IsNullOrEmpty(dto.ReturnInstructions)
-                ? dto.ReturnInstructions
-                : "Instruções padrão de devolução...";
+            var oldStatus = order.Status;
+            var auditMessage = $"Status alterado manualmente para {dto.Status}";
 
-            auditMessage += ". Instruções geradas.";
-        }
-
-        // --- 2. Lógica de Reprovação de Reembolso ---
-        if (dto.Status == "Reembolso Reprovado")
-        {
-            order.RefundRejectionReason = dto.RefundRejectionReason;
-            order.RefundRejectionProof = dto.RefundRejectionProof;
-            auditMessage += ". Justificativa e provas anexadas.";
-        }
-
-        // --- 3. Lógica Principal de Reembolso (Total ou Parcial) ---
-        if ((dto.Status == "Reembolsado" || dto.Status == "Cancelado")
-            && order.Status != "Reembolsado"
-            && !string.IsNullOrEmpty(order.StripePaymentIntentId))
-        {
-            try
+            // --- 1. Lógica de Logística Reversa ---
+            if (dto.Status == "Aguardando Devolução")
             {
-                decimal amountToRefund = 0;
+                if (!string.IsNullOrEmpty(dto.ReverseLogisticsCode))
+                    order.ReverseLogisticsCode = dto.ReverseLogisticsCode;
 
-                // Define qual valor será estornado
-                if (dto.RefundAmount.HasValue)
+                order.ReturnInstructions = !string.IsNullOrEmpty(dto.ReturnInstructions)
+                    ? dto.ReturnInstructions
+                    : "Instruções padrão de devolução...";
+
+                auditMessage += ". Instruções geradas.";
+            }
+
+            // --- 2. Lógica de Motivo e Prova (Unificada) ---
+            if (dto.Status == "Reembolso Reprovado" || 
+                dto.Status == "Reembolsado" || 
+                dto.Status == "Reembolsado Parcialmente" ||
+                dto.Status == "Cancelado")
+            {
+                if (!string.IsNullOrEmpty(dto.RefundRejectionReason))
+                    order.RefundRejectionReason = dto.RefundRejectionReason;
+
+                if (!string.IsNullOrEmpty(dto.RefundRejectionProof))
+                    order.RefundRejectionProof = dto.RefundRejectionProof;
+
+                if (dto.Status == "Reembolso Reprovado") 
+                    auditMessage += ". Justificativa e provas anexadas.";
+            }
+
+            // --- 3. Lógica Principal de Reembolso (Total ou Parcial) ---
+            if ((dto.Status == "Reembolsado" || 
+                 dto.Status == "Reembolsado Parcialmente" || 
+                 dto.Status == "Cancelado")
+                && order.Status != "Reembolsado"
+                && order.Status != "Reembolsado Parcialmente"
+                && order.Status != "Cancelado"
+                && !string.IsNullOrEmpty(order.StripePaymentIntentId))
+            {
+                try
                 {
-                    // Se o Admin digitou um valor específico
-                    amountToRefund = dto.RefundAmount.Value;
+                    decimal amountToRefund = 0;
+
+                    if (dto.RefundAmount.HasValue)
+                        amountToRefund = dto.RefundAmount.Value;
+                    else
+                        amountToRefund = order.RefundRequestedAmount ?? order.TotalAmount;
+
+                    if (amountToRefund > order.TotalAmount)
+                        throw new Exception($"O valor do reembolso ({amountToRefund:C}) não pode ser maior que o total do pedido.");
+
+                    if (order.RefundType == "Parcial" && order.RefundRequestedAmount.HasValue)
+                    {
+                        if (amountToRefund > order.RefundRequestedAmount.Value)
+                            throw new Exception($"O valor do reembolso ({amountToRefund:C}) excede o valor calculado dos itens solicitados ({order.RefundRequestedAmount.Value:C}).");
+                    }
+
+                    await _paymentService.RefundPaymentAsync(order.StripePaymentIntentId, amountToRefund);
+
+                    auditMessage += $". Reembolso de R$ {amountToRefund:N2} processado no Stripe.";
+
+                    if (dto.Status == "Reembolsado" && amountToRefund < order.TotalAmount)
+                    {
+                        dto = dto with { Status = "Reembolsado Parcialmente" };
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Se não digitou, assume o valor solicitado pelo cliente (se houver) ou o total do pedido
-                    amountToRefund = order.RefundRequestedAmount ?? order.TotalAmount;
-                }
-
-                // Validação de Segurança 1: Não devolver mais que o total do pedido
-                if (amountToRefund > order.TotalAmount)
-                    throw new Exception($"O valor do reembolso ({amountToRefund:C}) não pode ser maior que o total do pedido.");
-
-                // Validação de Segurança 2: Se for parcial, não devolver mais que a soma dos itens solicitados
-                if (order.RefundType == "Parcial" && order.RefundRequestedAmount.HasValue)
-                {
-                    if (amountToRefund > order.RefundRequestedAmount.Value)
-                        throw new Exception($"O valor do reembolso ({amountToRefund:C}) excede o valor calculado dos itens solicitados ({order.RefundRequestedAmount.Value:C}).");
-                }
-
-                // Chama o serviço do Stripe passando o valor calculado
-                // Nota: Seu método RefundPaymentAsync deve aceitar o segundo parâmetro decimal? (conforme passo 3 do plano)
-                await _paymentService.RefundPaymentAsync(order.StripePaymentIntentId, amountToRefund);
-
-                auditMessage += $". Reembolso de R$ {amountToRefund:N2} processado no Stripe.";
-
-                if (amountToRefund < order.TotalAmount)
-                {
-                    dto = dto with { Status = "Reembolsado Parcialmente" };
+                    throw new Exception($"Erro no reembolso Stripe: {ex.Message}");
                 }
             }
-            catch (Exception ex)
+
+            // --- 4. Atualização de Data de Entrega ---
+            if (dto.Status == "Entregue" && order.Status != "Entregue")
+                order.DeliveryDate = DateTime.UtcNow;
+
+            // --- 5. Atualização de Rastreio ---
+            if (!string.IsNullOrEmpty(dto.TrackingCode))
             {
-                // Em caso de erro no Stripe, interrompe o processo e não salva o status "Reembolsado"
-                throw new Exception($"Erro no reembolso Stripe: {ex.Message}");
+                order.TrackingCode = dto.TrackingCode;
+                auditMessage += $" (Rastreio: {dto.TrackingCode})";
+            }
+
+            // --- Finalização ---
+            AddAuditLog(order, dto.Status, auditMessage, $"Admin:{adminUserId}");
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            if (oldStatus != dto.Status)
+            {
+                _ = SendOrderUpdateEmailAsync(order.UserId, order, dto.Status);
             }
         }
-
-        // --- 4. Atualização de Data de Entrega ---
-        if (dto.Status == "Entregue" && order.Status != "Entregue")
-            order.DeliveryDate = DateTime.UtcNow;
-
-        // --- 5. Atualização de Rastreio ---
-        if (!string.IsNullOrEmpty(dto.TrackingCode))
+        catch
         {
-            order.TrackingCode = dto.TrackingCode;
-            auditMessage += $" (Rastreio: {dto.TrackingCode})";
-        }
-
-        // --- Finalização ---
-        AddAuditLog(order, dto.Status, auditMessage, $"Admin:{adminUserId}");
-
-        await _context.SaveChangesAsync();
-
-        if (oldStatus != dto.Status)
-        {
-            _ = SendOrderUpdateEmailAsync(order.UserId, order, dto.Status);
+            await transaction.RollbackAsync();
+            throw;
         }
     }
 
@@ -446,18 +485,23 @@ public class OrderService(
             if (dto.Items == null || dto.Items.Count == 0)
                 throw new Exception("Nenhum item selecionado para reembolso parcial.");
 
+            decimal discountRatio = order.SubTotal > 0 ? order.Discount / order.SubTotal : 0;
+
             foreach (var itemRequest in dto.Items)
             {
                 var orderItem = order.Items.FirstOrDefault(i => i.ProductId == itemRequest.ProductId)
-    ?? throw        new Exception($"Produto {itemRequest.ProductId} não pertence a este pedido.");
+                    ?? throw new Exception($"Produto {itemRequest.ProductId} não pertence a este pedido.");
 
                 if (itemRequest.Quantity > orderItem.Quantity || itemRequest.Quantity <= 0)
                     throw new Exception($"Quantidade inválida para o produto {orderItem.ProductName}.");
 
                 orderItem.RefundQuantity = itemRequest.Quantity;
 
-                calculatedRefundAmount += orderItem.UnitPrice * itemRequest.Quantity;
+                decimal effectiveUnitPrice = orderItem.UnitPrice * (1 - discountRatio);
+                calculatedRefundAmount += effectiveUnitPrice * itemRequest.Quantity;
             }
+
+            calculatedRefundAmount = Math.Round(calculatedRefundAmount, 2);
 
             order.RefundType = "Parcial";
             order.RefundRequestedAmount = calculatedRefundAmount;
@@ -612,14 +656,22 @@ public class OrderService(
                 case "Cancelado":
                     subject = $"Pedido Cancelado - #{order.Id}";
                     body = $"Seu pedido #{order.Id} foi cancelado.";
+                    if (!string.IsNullOrEmpty(order.RefundRejectionReason))
+                        body += $"<br><br><b>Motivo:</b> {order.RefundRejectionReason}";
                     break;
                 case "Reembolsado":
                     subject = $"Reembolso Processado - #{order.Id}";
                     body = $"O reembolso do seu pedido #{order.Id} foi processado e deve aparecer na sua fatura em breve.";
+                    if (!string.IsNullOrEmpty(order.RefundRejectionReason))
+                        body += $"<br><br><b>Detalhes:</b> {order.RefundRejectionReason}";
                     break;
                 case "Reembolsado Parcialmente":
                     subject = $"Reembolso Parcial Processado - #{order.Id}";
                     body = $"Um reembolso parcial do seu pedido #{order.Id} foi processado e o valor deve aparecer na sua fatura em breve.";
+                    if (!string.IsNullOrEmpty(order.RefundRejectionReason))
+                        body += $"<br><br><b>Detalhes do Reembolso:</b> {order.RefundRejectionReason}";
+                    if (!string.IsNullOrEmpty(order.RefundRejectionProof))
+                        body += $"<br><br><b>Comprovante/Anexo:</b> <a href=\"{order.RefundRejectionProof}\">Clique aqui para visualizar</a>";
                     break;
                 case "Aguardando Devolução":
                     subject = $"Instruções de Devolução - Pedido #{order.Id}";
@@ -664,7 +716,7 @@ public class OrderService(
             order.ShippingAddress,
             order.User?.FullName ?? "Cliente",
             [.. order.Items.Select(i =>
-                new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)
+                new OrderItemDto(i.ProductName, i.Quantity, i.RefundQuantity, i.UnitPrice, i.Quantity * i.UnitPrice)
             )],
             paymentWarning
         );
@@ -692,7 +744,7 @@ public class OrderService(
             order.User?.Email ?? "N/A",
             DataMaskingExtensions.MaskIpAddress(order.CustomerIp),
             [.. order.Items.Select(i =>
-                new OrderItemDto(i.ProductName, i.Quantity, i.UnitPrice, i.Quantity * i.UnitPrice)
+                new OrderItemDto(i.ProductName, i.Quantity, i.RefundQuantity, i.UnitPrice, i.Quantity * i.UnitPrice)
             )],
             [.. order.History.Select(h =>
                 new OrderHistoryDto(h.Status, h.Message, h.ChangedBy, h.Timestamp)

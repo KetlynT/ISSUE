@@ -16,9 +16,9 @@ public class AdminController(IOrderService orderService, IProductService product
     private readonly IProductService _productService = productService;
 
     [HttpGet("orders")]
-    public async Task<ActionResult<List<AdminOrderDto>>> GetAllOrders()
+    public async Task<IActionResult> GetOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var orders = await _orderService.GetAllOrdersAsync();
+        var orders = await _orderService.GetAllOrdersAsync(page, pageSize);
         return Ok(orders);
     }
 

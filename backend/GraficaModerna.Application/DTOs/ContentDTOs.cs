@@ -4,13 +4,13 @@ namespace GraficaModerna.Application.DTOs;
 
 public class CreateContentDto
 {
-    [Required(ErrorMessage = "O t�tulo � obrigat�rio.")]
+    [Required(ErrorMessage = "O título é obrigatório.")]
     public string Title { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "O slug � obrigat�rio.")]
+    [Required(ErrorMessage = "O slug é obrigatório.")]
     public string Slug { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "O conte�do � obrigat�rio.")]
+    [Required(ErrorMessage = "O conteúdo é obrigatório.")]
     public string Content { get; set; } = string.Empty;
 }
 

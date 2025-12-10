@@ -44,9 +44,15 @@ public class CouponService(AppDbContext context) : ICouponService
 
     public async Task<Coupon?> GetValidCouponAsync(string code)
     {
-        var coupon =
-            await _context.Coupons.FirstOrDefaultAsync(c =>
-                c.Code.Equals(code, StringComparison.CurrentCultureIgnoreCase));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var coupon = await _context.Coupons
+            .FirstOrDefaultAsync(c => c.Code.ToUpper() == code.ToUpper());
+        sw.Stop();
+        var elapsed = sw.ElapsedMilliseconds;
+        if (elapsed < 300) 
+        {
+            await Task.Delay((int)(300 - elapsed));
+        }
         if (coupon == null || !coupon.IsValid()) return null;
         return coupon;
     }

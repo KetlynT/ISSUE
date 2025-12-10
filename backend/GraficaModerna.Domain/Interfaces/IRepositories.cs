@@ -1,4 +1,5 @@
-﻿using GraficaModerna.Domain.Entities;
+﻿using GraficaModerna.Domain.Models;
+using GraficaModerna.Domain.Entities;
 
 namespace GraficaModerna.Domain.Interfaces;
 
@@ -14,8 +15,8 @@ public interface IOrderRepository
 {
     Task AddAsync(Order order);
     Task<Order?> GetByIdAsync(Guid id);
-    Task<List<Order>> GetByUserIdAsync(string userId);
-    Task<List<Order>> GetAllAsync();
+    Task<PagedResultDto<Order>> GetByUserIdAsync(string userId, int page, int pageSize);
+    Task<PagedResultDto<Order>> GetAllAsync(int page, int pageSize);
     Task UpdateAsync(Order order);
 }
 

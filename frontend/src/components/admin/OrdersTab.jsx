@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { OrderService } from '../../services/orderService';
+import dashboardService from '../../services/dashboardService';
 import { ProductService } from '../../services/productService';
 import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
-import { Search, Eye, X, Settings, RefreshCcw, AlertCircle } from 'lucide-react';
+import { Search, Eye, X, Settings, RefreshCcw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);
@@ -11,21 +11,21 @@ const OrdersTab = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
     
-    // Estados do Modal
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [uploadingProof, setUploadingProof] = useState(false);
     
-    // Inputs do Formulário
     const [statusInput, setStatusInput] = useState('');
     const [trackingInput, setTrackingInput] = useState('');
     const [reverseCodeInput, setReverseCodeInput] = useState('');
     const [returnInstructionsInput, setReturnInstructionsInput] = useState('');
     const [refundReason, setRefundReason] = useState('');
     const [refundProof, setRefundProof] = useState('');
-    const [refundAmountInput, setRefundAmountInput] = useState(''); // Novo: Valor do Reembolso
+    const [refundAmountInput, setRefundAmountInput] = useState('');
 
-    useEffect(() => { loadOrders(); }, []);
+    useEffect(() => { loadOrders(); }, [page]);
 
     useEffect(() => {
         let result = orders;
@@ -46,8 +46,10 @@ const OrdersTab = () => {
 
     const loadOrders = async () => {
         try {
-            const data = await OrderService.getAllOrders();
-            setOrders(data);
+            setLoading(true);
+            const data = await dashboardService.getOrders(page);
+            setOrders(data.items || []);
+            setTotalPages(data.totalPages || 1);
         } catch (e) {
             toast.error("Erro ao carregar pedidos.");
         } finally {
@@ -64,7 +66,6 @@ const OrdersTab = () => {
         setRefundReason(order.refundRejectionReason || '');
         setRefundProof(order.refundRejectionProof || '');
 
-        // Define o valor sugerido para reembolso
         if (order.refundRequestedAmount) {
             setRefundAmountInput(order.refundRequestedAmount.toString());
         } else {
@@ -104,18 +105,15 @@ const OrdersTab = () => {
                 refundRejectionProof: refundProof
             };
 
-            // Se for reembolso, envia o valor definido pelo admin
             if (statusInput === 'Reembolsado') {
                 payload.refundAmount = parseFloat(refundAmountInput);
             }
 
-            await OrderService.updateOrderStatus(selectedOrder.id, payload);
+            await dashboardService.updateOrderStatus(selectedOrder.id, payload);
             
-            // Atualiza a lista local
             const updatedList = orders.map(o => o.id === selectedOrder.id ? {
                 ...o, 
                 ...payload,
-                // Mantém dados originais que não mudaram
                 refundType: o.refundType, 
                 refundRequestedAmount: o.refundRequestedAmount
             } : o);
@@ -128,7 +126,7 @@ const OrdersTab = () => {
         }
     };
 
-    if (loading) return <div className="text-center py-10">Carregando pedidos...</div>;
+    if (loading && orders.length === 0) return <div className="text-center py-10">Carregando pedidos...</div>;
 
     return (
         <div>
@@ -139,7 +137,7 @@ const OrdersTab = () => {
                         <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                         <input 
                             className="pl-10 pr-4 py-2 border rounded-lg w-full md:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Buscar ID, Nome, CPF/CNPJ ou Email..."
+                            placeholder="Buscar nesta página..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -159,6 +157,7 @@ const OrdersTab = () => {
                         <option value="Aguardando Devolução">Aguardando Devolução</option>
                         <option value="Reembolsado">Reembolsado</option>
                         <option value="Reembolso Reprovado">Reembolso Reprovado</option>
+                        <option value="Parcialmente Reembolsado">Parcialmente Reembolsado</option>
                     </select>
                 </div>
             </div>
@@ -214,6 +213,28 @@ const OrdersTab = () => {
                     </tbody>
                 </table>
                 {filteredOrders.length === 0 && <div className="p-8 text-center text-gray-500">Nenhum pedido encontrado.</div>}
+            
+                <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center bg-gray-50">
+                    <span className="text-sm text-gray-500">
+                        Página {page} de {totalPages}
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="p-1 px-3 bg-white border rounded hover:bg-gray-100 disabled:opacity-50"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <button
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page === totalPages}
+                            className="p-1 px-3 bg-white border rounded hover:bg-gray-100 disabled:opacity-50"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {selectedOrder && (
@@ -265,7 +286,6 @@ const OrdersTab = () => {
                                         <div key={idx} className="flex justify-between text-sm">
                                             <div>
                                                 <span>{item.quantity}x {item.productName}</span>
-                                                {/* Exibe indicador visual se o DTO suportar a informação de quantidade devolvida */}
                                                 {item.refundQuantity > 0 && (
                                                     <span className="text-xs text-red-600 font-bold ml-2 bg-red-50 px-1 rounded">
                                                         (Devolução: {item.refundQuantity})
@@ -302,6 +322,7 @@ const OrdersTab = () => {
                                             <option value="Aguardando Devolução">Aguardando Devolução</option>
                                             <option value="Reembolsado">Reembolsado</option>
                                             <option value="Reembolso Reprovado">Reembolso Reprovado</option>
+                                            <option value="Parcialmente Reembolsado">Parcialmente Reembolsado</option>
                                         </select>
                                     </div>
 
@@ -405,6 +426,43 @@ const OrdersTab = () => {
                                             </div>
                                         </div>
                                     )}
+
+                                    {statusInput === 'Parcialmente Reembolsado' && (
+                                        <div className="bg-red-50 p-4 rounded border border-red-200 space-y-3 animate-in fade-in mt-3">
+                                            <h5 className="font-bold text-xs text-red-800 uppercase border-b border-red-200 pb-1 mb-2">
+                                                Motivo da Aprovação Parcial
+                                            </h5>
+                                            
+                                            <div>
+                                                <label className="block text-xs font-bold text-red-700 mb-1">Justificativa (Obrigatório)</label>
+                                                <textarea 
+                                                    className="w-full border border-red-300 rounded p-2 text-sm outline-none focus:border-red-500 h-24 resize-none"
+                                                    placeholder="Explique ao cliente por que o reembolso foi negado..."
+                                                    value={refundReason}
+                                                    onChange={e => setRefundReason(e.target.value)}
+                                                    required={statusInput === 'Parcialmente Reembolsado'}
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-red-700 mb-1">Prova / Evidência (Opcional)</label>
+                                                <div className="flex gap-2 items-center">
+                                                    <input 
+                                                        type="file" 
+                                                        accept="image/*,video/mp4,video/webm"
+                                                        onChange={handleProofUpload}
+                                                        className="text-xs w-full file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-red-100 file:text-red-700 hover:file:bg-red-200"
+                                                    />
+                                                    {uploadingProof && <span className="text-xs text-gray-500">Enviando...</span>}
+                                                </div>
+                                                {refundProof && (
+                                                    <div className="mt-2 text-xs text-green-600 truncate">
+                                                        Arquivo anexado: <a href={refundProof} target="_blank" rel="noopener noreferrer" className="underline">Ver arquivo</a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex justify-end gap-3">
@@ -430,7 +488,8 @@ const OrderStatusBadge = ({ status }) => {
         'Reembolso Solicitado': 'bg-purple-100 text-purple-800',
         'Aguardando Devolução': 'bg-orange-100 text-orange-800',
         'Reembolsado': 'bg-gray-800 text-white',
-        'Reembolso Reprovado': 'bg-red-200 text-red-900'
+        'Reembolso Reprovado': 'bg-red-200 text-red-900',
+        'Parcialmente Reembolsado': 'bg-purple-200 text-purple-900'
     };
     return (
         <span className={`px-2 py-1 rounded text-xs font-bold ${styles[status] || 'bg-gray-100'}`}>

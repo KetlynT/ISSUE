@@ -1,4 +1,4 @@
-﻿namespace GraficaModerna.Application.DTOs;
+namespace GraficaModerna.Domain.Models;
 
 public class PagedResultDto<T>
 {
@@ -6,5 +6,5 @@ public class PagedResultDto<T>
     public int TotalItems { get; set; }
     public int Page { get; set; }
     public int PageSize { get; set; }
-    public int TotalPages => (int)Math.Ceiling((double)TotalItems / PageSize);
+    public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)TotalItems / PageSize) : 0;
 }

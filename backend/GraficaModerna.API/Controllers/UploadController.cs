@@ -11,21 +11,20 @@ namespace GraficaModerna.API.Controllers;
 [EnableRateLimiting("UploadPolicy")]
 public class UploadController : ControllerBase
 {
-    private const long MaxFileSize = 50 * 1024 * 1024;
+    private const long MaxFileSize = 50 * 1024 * 1024; // 50MB
     private const int MaxImageDimension = 2048;
 
-    private static readonly Dictionary<string, List<byte[]>> _fileSignatures = new()
+    // Definição das extensões permitidas e seus MIME types esperados
+    private static readonly Dictionary<string, string[]> _allowedMimeTypes = new()
     {
-        { ".jpg", [new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, new byte[] { 0xFF, 0xD8, 0xFF, 0xE1 }, new byte[] { 0xFF, 0xD8, 0xFF, 0xE2 }] },
-        { ".jpeg", [new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, new byte[] { 0xFF, 0xD8, 0xFF, 0xE1 }, new byte[] { 0xFF, 0xD8, 0xFF, 0xE2 }] },
-        { ".png", [new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }] },
-        { ".webp", [new byte[] { 0x52, 0x49, 0x46, 0x46 }] },
-        { ".mp4", [new byte[] { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70 }, new byte[] { 0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70 }] },
-        { ".webm", [new byte[] { 0x1A, 0x45, 0xDF, 0xA3 }] },
-        { ".mov", [new byte[] { 0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70 }] }
+        { ".jpg",  ["image/jpeg"] },
+        { ".jpeg", ["image/jpeg"] },
+        { ".png",  ["image/png"] },
+        { ".webp", ["image/webp"] },
+        { ".mp4",  ["video/mp4", "application/mp4"] },
+        { ".webm", ["video/webm"] },
+        { ".mov",  ["video/quicktime", "video/mp4"] }
     };
-
-    private readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"];
 
     [HttpPost]
     [Authorize(Roles = "Admin")]
@@ -37,17 +36,19 @@ public class UploadController : ControllerBase
         if (file.Length > MaxFileSize)
             return BadRequest($"O ficheiro excede o tamanho máximo permitido de {MaxFileSize / 1024 / 1024}MB.");
 
+        // 1. Validação de Extensão e MIME Type
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(ext))
+        if (!_allowedMimeTypes.TryGetValue(ext, out var validMimes))
             return BadRequest("Formato de ficheiro não permitido.");
 
-        if (!_fileSignatures.TryGetValue(ext, out var signatures))
-            return BadRequest($"Tipo MIME inválido. Esperado imagem/vídeo, recebido: {file.ContentType}");
+        if (!validMimes.Contains(file.ContentType.ToLower()))
+            return BadRequest($"O tipo de conteúdo '{file.ContentType}' não corresponde à extensão '{ext}'.");
 
         var folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-        if (!Directory.Exists(folderPath)) 
+        if (!Directory.Exists(folderPath))
             Directory.CreateDirectory(folderPath);
 
+        // Gera nome seguro (evita Directory Traversal e colisão)
         var fileName = $"{Guid.NewGuid()}{ext}";
         var filePath = Path.Combine(folderPath, fileName);
 
@@ -57,42 +58,25 @@ public class UploadController : ControllerBase
             await file.CopyToAsync(memoryStream);
             memoryStream.Position = 0;
 
-            var headerBytes = new byte[12];
-            var bytesRead = await memoryStream.ReadAsync(headerBytes.AsMemory(0, 12));
-            
-            bool isValid = false;
-            foreach (var signature in signatures)
+            // 2. Validação Profunda de Assinatura (Magic Numbers)
+            if (!await ValidateFileSignatureAsync(memoryStream, ext))
             {
-                if (bytesRead >= signature.Length && 
-                    headerBytes.Take(signature.Length).SequenceEqual(signature))
-                {
-                    isValid = true;
-                    break;
-                }
+                return BadRequest("O arquivo parece estar corrompido ou falsificado (assinatura inválida).");
             }
-
-            if (ext == ".webp" && isValid)
-            {
-                if (bytesRead < 12 || 
-                    !(headerBytes[8] == 0x57 && headerBytes[9] == 0x45 && 
-                      headerBytes[10] == 0x42 && headerBytes[11] == 0x50))
-                {
-                    isValid = false;
-                }
-            }
-
-            if (!isValid)
-                return BadRequest("O arquivo está corrompido ou a extensão não corresponde ao conteúdo real.");
 
             memoryStream.Position = 0;
 
-            if (ext == ".mp4" || ext == ".webm" || ext == ".mov")
+            // 3. Processamento Seguro
+            if (IsVideo(ext))
             {
+                // Para vídeos, salvamos diretamente após validar o cabeçalho.
+                // Nota: A segurança ideal exigiria re-codificação (ffmpeg), mas é custoso.
                 using var stream = new FileStream(filePath, FileMode.Create);
                 await memoryStream.CopyToAsync(stream);
             }
             else
             {
+                // Para imagens, o re-processamento atua como sanitização (remove scripts em EXIF, etc)
                 using var image = await Image.LoadAsync(memoryStream);
 
                 if (image.Width > MaxImageDimension || image.Height > MaxImageDimension)
@@ -104,19 +88,63 @@ public class UploadController : ControllerBase
                     }));
                 }
 
+                // Salva a imagem processada (remove metadados maliciosos)
                 await image.SaveAsync(filePath);
             }
         }
         catch (UnknownImageFormatException)
         {
-            return BadRequest("Formato de imagem não suportado ou arquivo corrompido.");
+            return BadRequest("O arquivo não é uma imagem válida ou está corrompido.");
+        }
+        catch (ImageFormatException)
+        {
+            return BadRequest("Erro ao decodificar a imagem.");
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Erro ao processar o ficheiro: {ex.Message}");
+            // Logar o erro real no servidor, retornar genérico para o cliente
+            Console.WriteLine($"Erro Upload: {ex}");
+            return StatusCode(500, "Erro interno ao processar o ficheiro.");
         }
 
         var fileUrl = $"{Request.Scheme}://{Request.Host}/uploads/{fileName}";
         return Ok(new { url = fileUrl });
+    }
+
+    private static bool IsVideo(string ext) => ext is ".mp4" or ".webm" or ".mov";
+
+    /// <summary>
+    /// Valida os bytes iniciais do arquivo (Magic Numbers) para evitar spoofing de extensão.
+    /// </summary>
+    private static async Task<bool> ValidateFileSignatureAsync(MemoryStream stream, string ext)
+    {
+        stream.Position = 0;
+        var header = new byte[16]; // Lemos até 16 bytes para cobrir assinaturas maiores
+        var bytesRead = await stream.ReadAsync(header);
+
+        if (bytesRead < 4) return false;
+
+        return ext switch
+        {
+            // Imagens
+            ".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            
+            ".png" => header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47,
+            
+            ".webp" => bytesRead >= 12 && 
+                       header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 && // RIFF
+                       header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50, // WEBP
+            
+            // Vídeos (ISO Base Media File Format - MP4/MOV)
+            // A validação anterior falhava pois o tamanho do header (bytes 0-3) varia.
+            // O padrão correto é verificar se os bytes 4-7 contêm 'ftyp'.
+            ".mp4" or ".mov" => bytesRead >= 8 &&
+                                header[4] == 0x66 && header[5] == 0x74 && header[6] == 0x79 && header[7] == 0x70, // 'ftyp'
+            
+            // WebM (Matroska)
+            ".webm" => header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3,
+
+            _ => false
+        };
     }
 }
