@@ -37,7 +37,7 @@ public class StripePaymentService : IPaymentService
 
             frontendUrl = frontendUrl.TrimEnd('/');
 
-            var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}";
+            var successUrl = $"{frontendUrl}/sucesso?session_id={{CHECKOUT_SESSION_ID}}&order_id={order.Id}";
             var cancelUrl = $"{frontendUrl}/meus-pedidos";
 
             var encryptedOrder = _securityService.Protect(order.Id.ToString());

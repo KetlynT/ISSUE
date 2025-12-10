@@ -102,8 +102,7 @@ const PagesTab = () => {
                                 name="slug" 
                                 value={selectedPage.slug} 
                                 placeholder="ex: politica-de-troca"
-                                // Opcional: Bloquear edição do slug em páginas existentes para evitar quebra de links
-                                // readOnly={!!selectedPage.id} 
+                                readOnly={!!selectedPage.id} 
                                 onChange={e => setSelectedPage({...selectedPage, slug: e.target.value})} 
                             />
                         </div>

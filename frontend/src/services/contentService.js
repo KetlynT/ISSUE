@@ -23,8 +23,8 @@ export const ContentService = {
   },
 
   // Atualiza uma página (Admin)
-  updatePage: async (id, data) => {
-    await api.put(`/content/pages/${id}`, data);
+  updatePage: async (slug, data) => {
+    await api.put(`/content/pages/${slug}`, data);
   },
 
   // Pega todas as configurações (Público/Admin)
