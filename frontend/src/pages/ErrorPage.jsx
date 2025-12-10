@@ -1,21 +1,28 @@
+import { useEffect } from 'react';
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 export const ErrorPage = () => {
+  
+  useEffect(() => {
+    const navEntry = performance.getEntriesByType("navigation")[0];
+    if (navEntry && navEntry.type === 'reload') {
+       handleRetry();
+    }
+  }, []);
+
   const handleRetry = () => {
-    // 1. Preserva
+    const lastRoute = sessionStorage.getItem('last_valid_route') || '/';
     const savedConsent = localStorage.getItem('lgpd_consent');
     
-    // 2. Limpa
     localStorage.clear();
     sessionStorage.clear();
     
-    // 3. Restaura
     if (savedConsent) {
         localStorage.setItem('lgpd_consent', savedConsent);
     }
 
-    window.location.href = '/';
+    window.location.href = lastRoute;
   };
 
   return (

@@ -4,7 +4,7 @@ const authService = {
   login: async (credentials, isAdmin = false) => {
     const url = isAdmin ? '/auth/admin/login' : '/auth/login';
     const response = await api.post(url, credentials);
-    return response.data; // Retorna dados do usuário (email, role), tokens estão nos cookies
+    return response.data;
   },
 
   register: async (data) => {
@@ -18,7 +18,6 @@ const authService = {
     } catch (e) {
       console.error(e);
     }
-    // Cookies são limpos pelo backend
   },
 
   getProfile: async () => {
@@ -40,8 +39,6 @@ const authService = {
     }
   },
 
-  // isAuthenticated via localStorage não é mais confiável/possível
-  // Deve-se confiar no estado da aplicação (Context) ou checar via API
   isAuthenticated: async () => {
       try {
           await api.get('/auth/check-auth');

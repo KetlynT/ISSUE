@@ -8,7 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Essencial para enviar cookies
+  withCredentials: true,
 });
 
 let isRefreshing = false;
@@ -24,8 +24,6 @@ const processQueue = (error, token = null) => {
   });
   failedQueue = [];
 };
-
-// Não há mais interceptor de request para injetar token (cookies são automáticos)
 
 api.interceptors.response.use(
   (response) => response,
@@ -52,7 +50,6 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Tenta refresh via cookie (endpoint sem body)
         await api.post('/auth/refresh-token');
 
         processQueue(null);
@@ -60,7 +57,7 @@ api.interceptors.response.use(
 
       } catch (refreshError) {
         processQueue(refreshError, null);
-        window.location.href = '/login';
+        window.location.replace('/login');
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

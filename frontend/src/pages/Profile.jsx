@@ -22,7 +22,6 @@ export const Profile = () => {
         const data = await authService.getProfile();
         setFormData({
             fullName: data.fullName || '',
-            // Aplica máscara ao receber os dados brutos do backend
             phoneNumber: maskPhone(data.phoneNumber || ''),
             cpfCnpj: maskCpfCnpj(data.cpfCnpj || ''),
             email: data.email || ''
@@ -40,7 +39,6 @@ export const Profile = () => {
     const { name, value } = e.target;
     let formattedValue = value;
 
-    // Aplica máscara em tempo real
     if (name === 'cpfCnpj') {
       formattedValue = maskCpfCnpj(value);
     } else if (name === 'phoneNumber') {
@@ -54,7 +52,6 @@ export const Profile = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Remove formatação antes de enviar para o backend
       await authService.updateProfile({
         fullName: formData.fullName,
         phoneNumber: cleanString(formData.phoneNumber),
@@ -85,7 +82,6 @@ export const Profile = () => {
         <div className="p-6 sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
                 
-                {/* Email (Readonly) */}
                 <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">E-mail (não alterável)</label>
                     <input 
@@ -95,7 +91,6 @@ export const Profile = () => {
                     />
                 </div>
 
-                {/* Nome */}
                 <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
                     <div className="relative">
@@ -110,7 +105,6 @@ export const Profile = () => {
                     </div>
                 </div>
 
-                {/* CPF/CNPJ */}
                 <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">CPF ou CNPJ</label>
                     <div className="relative">
@@ -127,7 +121,6 @@ export const Profile = () => {
                     </div>
                 </div>
 
-                {/* Telefone */}
                 <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Telefone / Celular</label>
                     <div className="relative">

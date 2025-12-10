@@ -29,7 +29,7 @@ export const ResetPassword = () => {
     try {
       await authService.resetPassword({ email, token, newPassword });
       toast.success("Senha alterada com sucesso!");
-      navigate('/login');
+      navigate('/login', { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.message || "Erro ao redefinir senha.");
     } finally {

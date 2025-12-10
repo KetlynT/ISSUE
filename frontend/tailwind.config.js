@@ -7,7 +7,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Define cores baseadas em variáveis CSS
         primary: 'var(--color-primary)',
         secondary: 'var(--color-secondary)',
         footer: {

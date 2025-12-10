@@ -5,7 +5,7 @@ import { CheckCircle, XCircle, Loader } from 'lucide-react';
 
 export const ConfirmEmail = () => {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState('loading'); // loading, success, error
+  const [status, setStatus] = useState('loading');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export const ConfirmEmail = () => {
       try {
         await authService.confirmEmail(userId, token);
         setStatus('success');
-        setTimeout(() => navigate('/login'), 5000);
+        setTimeout(() => navigate('/login', { replace: true }), 5000);
       } catch (error) {
         console.error(error);
         setStatus('error');
@@ -56,7 +56,7 @@ export const ConfirmEmail = () => {
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Falha na Confirmação</h2>
             <p className="text-gray-600">O link é inválido ou já expirou.</p>
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/', { replace: true })}
               className="mt-6 px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold text-gray-700 transition-colors"
             >
               Voltar ao Início

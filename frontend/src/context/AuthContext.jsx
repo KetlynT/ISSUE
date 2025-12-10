@@ -11,8 +11,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        // Agora verificamos a sessão diretamente com o backend (cookie)
-        // em vez de procurar token no localStorage
         const status = await authService.checkAuth();
         
         if (status.isAuthenticated) {
@@ -33,7 +31,6 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials, isAdmin = false) => {
     const data = await authService.login(credentials, isAdmin);
-    // Não precisamos mais salvar token manualmente
     const userProfile = await authService.getProfile(); 
     setUser({ ...userProfile, role: data.role });
     return data;
@@ -41,7 +38,6 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     const data = await authService.register(userData);
-    // Login automático após registro
     const userProfile = await authService.getProfile();
     setUser({ ...userProfile, role: data.role });
     return data;

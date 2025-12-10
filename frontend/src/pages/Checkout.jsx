@@ -26,6 +26,12 @@ export const Checkout = () => {
   const location = useLocation();
   const [coupon, setCoupon] = useState(location.state?.coupon || null);
 
+  useEffect(() => {
+    if (!loadingData && cartItems.length === 0) {
+       navigate('/carrinho', { replace: true });
+    }
+  }, [cartItems, loadingData, navigate]);
+
   const loadAddresses = async () => {
     try {
       const data = await AddressService.getAll();

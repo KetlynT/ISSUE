@@ -40,7 +40,7 @@ export const Home = () => {
       if (data) setSettings(prev => ({...prev, ...data}));
     }).catch(err => {
         console.error(err);
-        navigate('/error'); 
+        navigate('/error', { replace: true }); 
       });
   }, [navigate]);
 
@@ -63,7 +63,7 @@ export const Home = () => {
       setInputPage(data.page); 
     } catch (error) {
       console.error("Erro ao carregar catálogo:", error);
-      navigate('/error');
+      navigate('/error', { replace: true });
     } finally {
       setLoading(false);
       setIsFirstLoad(false); 

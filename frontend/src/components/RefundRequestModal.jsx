@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Button } from './ui/Button';
-import { formatCurrency } from '../utils/formatters'; // Ensure this utility exists
+import { formatCurrency } from '../utils/formatters';
 import PropTypes from 'prop-types';
 
 export default function RefundRequestModal({ order, onClose, onSubmit, isLoading }) {
-  const [refundType, setRefundType] = useState('Total'); // 'Total' ou 'Parcial'
-  const [selectedItems, setSelectedItems] = useState({}); // { productId: quantity }
+  const [refundType, setRefundType] = useState('Total'); 
+  const [selectedItems, setSelectedItems] = useState({});
 
   const handleToggleItem = (productId, maxQuantity) => {
     setSelectedItems(prev => {
@@ -33,9 +33,6 @@ export default function RefundRequestModal({ order, onClose, onSubmit, isLoading
     };
     onSubmit(payload);
   };
-
-  // Helper for currency format
-  const currencyFormatter = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -101,7 +98,7 @@ export default function RefundRequestModal({ order, onClose, onSubmit, isLoading
         <div className="bg-gray-100 p-3 rounded mb-4 text-right">
           <span className="text-gray-600 text-sm">Valor Estimado do Estorno:</span>
           <p className="text-lg font-bold text-green-600">
-            {refundType === 'Total' ? currencyFormatter(order.totalAmount) : 'R$ A calcular pelo admin'}
+            {refundType === 'Total' ? formatCurrency(order.totalAmount) : 'R$ A calcular pelo admin'}
           </p>
           <p className="text-xs text-gray-500 mt-1">
             * O valor final será analisado e confirmado pelo administrador.

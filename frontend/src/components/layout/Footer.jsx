@@ -28,18 +28,15 @@ export const Footer = () => {
   }, []);
 
   return (
-    // Usa as cores customizadas: bg-footer-bg e text-footer-text
     <footer className="bg-footer-bg text-footer-text py-12 border-t border-white/10">
       <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-3 gap-8 text-center md:text-left">
         
-        {/* Marca e Sobre */}
         <div>
           <h3 className="text-lg font-bold mb-4 flex items-center justify-center md:justify-start gap-2">
             {loading ? (
                 <span className="opacity-50 animate-pulse">Carregando...</span>
             ) : (
                 <>
-                   {/* Usa a cor primária para o ícone da logo */}
                     <span className="w-8 h-8 bg-primary rounded flex items-center justify-center text-white font-bold">
                         {settings?.site_name?.charAt(0) || 'G'}
                     </span>
@@ -48,12 +45,10 @@ export const Footer = () => {
             )}
           </h3>
           <p className="text-sm leading-relaxed opacity-80">
-            {/* Texto dinâmico vindo das configurações */}
             {settings?.footer_about || 'Configure o texto "Sobre" no painel administrativo.'}
           </p>
         </div>
 
-        {/* Links Dinâmicos */}
         <div>
           <h3 className="text-lg font-bold mb-4">Informações</h3>
           {loading ? (
@@ -76,7 +71,6 @@ export const Footer = () => {
           )}
         </div>
 
-        {/* Contato */}
         <div>
           <h3 className="text-lg font-bold mb-4">Contato</h3>
           {loading ? (
@@ -95,7 +89,6 @@ export const Footer = () => {
                 </li>
                 <li className="flex items-center justify-center md:justify-start gap-2">
                     <MapPin size={16} className="text-primary" />
-                    {/* Endereço agora dinâmico */}
                     {settings?.address || 'Endereço não configurado'}
                 </li>
             </ul>

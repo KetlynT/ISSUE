@@ -9,11 +9,9 @@ const baseFolder =
     ? `${process.env.APPDATA}/ASP.NET/https`
     : `${process.env.HOME}/.aspnet/https`;
 
-// --- CORREÇÃO: Cria a pasta se ela não existir ---
 if (!fs.existsSync(baseFolder)) {
   fs.mkdirSync(baseFolder, { recursive: true });
 }
-// ------------------------------------------------
 
 const certificateName = process.env.npm_package_name;
 const certFilePath = path.join(baseFolder, `${certificateName}.pem`);
@@ -41,6 +39,7 @@ export default defineConfig({
       cert: fs.readFileSync(certFilePath),
     },
     port: 5173,
+    host: true,
     strictPort: true,
     proxy: {
       '/api': {

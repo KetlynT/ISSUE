@@ -93,7 +93,6 @@ export const Cart = () => {
                             <button onClick={() => handleUpdateQuantity(item.productId, item.quantity, 1)} className="px-3 py-1 text-gray-600 hover:bg-gray-100"><Plus size={14} /></button>
                         </div>
                     </td>
-                    {/* Preço Unitário: text-primary */}
                     <td className="p-4 text-right font-bold text-primary">R$ {(item.totalPrice || 0).toFixed(2)}</td>
                     <td className="p-4 text-right">
                         <button onClick={() => removeFromCart(item.productId)} className="text-red-500 hover:bg-red-50 p-2 rounded-full"><Trash2 size={18} /></button>
@@ -140,7 +139,6 @@ export const Cart = () => {
 
             <div className="flex justify-between items-center text-lg font-bold text-gray-900 mt-4 pt-4 border-t border-gray-100 mb-6">
               <span>Total</span>
-              {/* Total Final: text-primary */}
               <span className="text-2xl text-primary">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total)}
               </span>

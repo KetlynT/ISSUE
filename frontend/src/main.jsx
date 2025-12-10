@@ -26,12 +26,11 @@ class GlobalErrorBoundary extends React.Component {
             <p className="text-gray-600">Tivemos um problema inesperado na aplicação.</p>
             <button 
               onClick={() => {
-                // Lógica de Preservação aqui também
                 const savedConsent = localStorage.getItem('lgpd_consent');
                 localStorage.clear();
                 if (savedConsent) localStorage.setItem('lgpd_consent', savedConsent);
                 
-                window.location.href = '/';
+                window.location.replace('/');
               }}
               className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >

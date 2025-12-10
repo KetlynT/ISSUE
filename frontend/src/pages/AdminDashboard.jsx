@@ -24,7 +24,7 @@ export const AdminDashboard = () => {
 
     if (!user || user.role !== 'Admin') {
       toast.error("Acesso não autorizado.");
-      navigate('/');
+      navigate('/', { replace: true });
       return;
     }
 

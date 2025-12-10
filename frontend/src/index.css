@@ -3,9 +3,8 @@
 @tailwind utilities;
 
 :root {
-  /* Cores Padrão */
-  --color-primary: #2563eb;       /* blue-600 */
-  --color-secondary: #1e40af;     /* blue-800 */
-  --color-footer-bg: #111827;     /* gray-900 */
-  --color-footer-text: #d1d5db;   /* gray-300 */
+  --color-primary: #2563eb;
+  --color-secondary: #1e40af;
+  --color-footer-bg: #111827;
+  --color-footer-text: #d1d5db;
 }

@@ -23,7 +23,4 @@ export const AddressService = {
   delete: async (id) => {
     await api.delete(`/addresses/${id}`);
   },
-
-  // Auxiliar para buscar endereço via CEP (ViaCEP ou similar, se quiser implementar no front)
-  // Por enquanto, deixamos manual ou usaremos o backend se necessário.
 };

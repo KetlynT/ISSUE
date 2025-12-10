@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom'; // Added useNavigate
-import { CheckCircle, Clock, Package, ArrowRight, AlertTriangle, Loader } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { CheckCircle, Package, ArrowRight, AlertTriangle, Loader } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { PaymentService } from '../services/paymentService';
 import confetti from 'canvas-confetti';
@@ -11,21 +11,16 @@ export const Success = () => {
   const sessionId = searchParams.get('session_id');
   const orderId = searchParams.get('order_id'); 
 
-  // Estados: verifying | success | processing | issue
   const [status, setStatus] = useState('verifying');
   const [attempts, setAttempts] = useState(0);
-  const maxAttempts = 5; // Tenta por aprox. 15 segundos
+  const maxAttempts = 5; 
 
   const processingRef = useRef(false);
 
   useEffect(() => {
     if (processingRef.current) return;
     
-    // Se não tiver ID do pedido, redireciona para Meus Pedidos após breve aviso ou imediatamente
     if (!orderId) {
-      // Opção A: Redirecionamento automático se faltar dados
-      // navigate('/meus-pedidos'); 
-      // Opção B: Mostrar estado genérico (usaremos 'issue' com texto amigável)
       setStatus('issue');
       return;
     }
@@ -42,16 +37,13 @@ export const Success = () => {
     try {
       const orderData = await PaymentService.getPaymentStatus(orderId);
       
-      // Status confirmados
       if (orderData.status === 'Pago' || orderData.status === 'Paid') {
         setStatus('success');
         triggerConfetti();
       } 
-      // Se cancelado ou erro explícito
       else if (orderData.status === 'Cancelado' || orderData.status === 'Falha') {
         setStatus('issue'); 
       } 
-      // Se ainda pendente, tenta de novo
       else {
         handleRetry();
       }
@@ -68,15 +60,12 @@ export const Success = () => {
         setTimeout(() => checkPaymentStatus(), 3000);
         return nextAttempt;
       } else {
-        // Esgotou tentativas: O pedido EXISTE, mas o pagamento ainda não compensou.
-        // Mudamos para "processing" para orientar o usuário a acompanhar nos pedidos.
         setStatus('processing');
         return nextAttempt;
       }
     });
   };
 
-  // Renderização do Conteúdo
   const renderContent = () => {
     switch (status) {
       case 'verifying':
@@ -102,7 +91,6 @@ export const Success = () => {
         );
 
       case 'processing':
-        // Caso de Timeout na verificação: O pedido foi feito, só não temos certeza do pagamento ainda.
         return (
           <>
             <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -118,8 +106,6 @@ export const Success = () => {
 
       case 'issue':
       default:
-        // Caso de Cancelamento ou Falta de OrderID
-        // A mensagem é positiva sobre o PEDIDO, mas alerta sobre o pagamento
         return (
           <>
             <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -142,19 +128,14 @@ export const Success = () => {
         {renderContent()}
 
         <div className="space-y-3 pt-4">
-          {/* O botão principal agora foca em levar o usuário para onde ele vê o status real */}
-          <Link to="/meus-pedidos">
-            <Button className="w-full py-3" variant="primary">
-              <Package size={18} className="mr-2" /> 
-              {status === 'success' ? 'Acompanhar Meus Pedidos' : 'Ver Status do Pedido'}
-            </Button>
-          </Link>
+          <Button className="w-full py-3" variant="primary" onClick={() => navigate('/meus-pedidos', { replace: true })}>
+            <Package size={18} className="mr-2" /> 
+            {status === 'success' ? 'Acompanhar Meus Pedidos' : 'Ver Status do Pedido'}
+          </Button>
           
-          <Link to="/">
-            <Button className="w-full py-3" variant="ghost">
-              Voltar para a Loja <ArrowRight size={18} className="ml-2" />
-            </Button>
-          </Link>
+          <Button className="w-full py-3" variant="ghost" onClick={() => navigate('/', { replace: true })}>
+            Voltar para a Loja <ArrowRight size={18} className="ml-2" />
+          </Button>
         </div>
       </div>
     </div>

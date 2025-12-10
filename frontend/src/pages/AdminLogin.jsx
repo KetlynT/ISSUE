@@ -18,10 +18,9 @@ export const AdminLogin = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      // O segundo parâmetro 'true' indica login de Admin
       await login(formData, true);
       toast.success("Bem-vindo, Administrador.");
-      navigate('/putiroski/dashboard');
+      navigate('/putiroski/dashboard', { replace: true });
     } catch (error) {
       console.error(error);
       const msg = error.response?.data?.message || "Acesso negado.";

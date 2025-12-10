@@ -16,7 +16,7 @@ export const CookieConsent = () => {
     };
 
     const delayedShow = () => {
-      setTimeout(showBanner, 500);
+      setTimeout(showBanner, 3000);
     };
 
     if (document.readyState === 'complete') {

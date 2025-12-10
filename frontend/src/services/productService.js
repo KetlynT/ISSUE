@@ -1,7 +1,5 @@
 import api from './api';
 
-// Interceptor removido daqui pois api.js já resolve autenticação via Cookie
-
 export const ProductService = {
   getAll: async (page = 1, pageSize = 8, search = '', sort = '', order = '') => {
     const params = new URLSearchParams({ page, pageSize });

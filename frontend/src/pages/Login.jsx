@@ -22,7 +22,6 @@ export const Login = () => {
     try {
       const data = await login({ email, password });
       
-      // ✅ CORREÇÃO: Admin NÃO pode logar aqui
       if (data.role === 'Admin') {
           await logout();
           toast.error("Acesso administrativo deve ser feito pela rota /putiroski", {
@@ -32,7 +31,6 @@ export const Login = () => {
           return;
       }
       
-      // Sincroniza carrinho guest para usuário logado
       await syncGuestCart();
       
       const from = location.state?.from?.pathname || '/';

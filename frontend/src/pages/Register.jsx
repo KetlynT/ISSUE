@@ -22,7 +22,6 @@ export const Register = () => {
     const { name, value } = e.target;
     let formattedValue = value;
 
-    // Aplica máscaras enquanto digita
     if (name === 'cpfCnpj') {
       formattedValue = maskCpfCnpj(value);
     } else if (name === 'phoneNumber') {
@@ -59,14 +58,13 @@ export const Register = () => {
     try {
       await register({
         fullName: formData.fullName,
-        // Remove pontuação antes de enviar ao backend
         cpfCnpj: cleanString(formData.cpfCnpj),
         phoneNumber: cleanString(formData.phoneNumber),
         email: formData.email,
         password: formData.password
       });
       toast.success("Conta criada com sucesso!");
-      navigate('/'); 
+      navigate('/', { replace: true }); 
     } catch (err) {
       console.error(err);
       const msg = err.response?.data?.message || "Erro ao criar conta. Verifique os dados.";
@@ -88,7 +86,6 @@ export const Register = () => {
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4">
-          {/* CPF/CNPJ */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">CPF ou CNPJ</label>
             <div className="relative">
@@ -99,13 +96,12 @@ export const Register = () => {
                     placeholder="000.000.000-00"
                     value={formData.cpfCnpj}
                     onChange={handleChange}
-                    maxLength={18} // Limita tamanho visual
+                    maxLength={18}
                     required
                 />
             </div>
           </div>
 
-          {/* Nome */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
             <div className="relative">
@@ -121,7 +117,6 @@ export const Register = () => {
             </div>
           </div>
 
-          {/* Email */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">E-mail</label>
             <div className="relative">
@@ -138,7 +133,6 @@ export const Register = () => {
             </div>
           </div>
 
-          {/* Telefone */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Telefone / WhatsApp</label>
             <div className="relative">
@@ -156,7 +150,6 @@ export const Register = () => {
             </div>
           </div>
 
-          {/* Senha */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Senha</label>
             <div className="relative">
@@ -173,7 +166,6 @@ export const Register = () => {
             </div>
           </div>
 
-          {/* Confirmar Senha */}
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Confirmar Senha</label>
             <div className="relative">

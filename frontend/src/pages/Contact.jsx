@@ -37,9 +37,7 @@ export const Contact = () => {
       
       <div className="grid md:grid-cols-2 gap-12">
         <div className="space-y-8">
-          {/* bg-blue-50 -> bg-primary/5 | border-blue-100 -> border-primary/10 */}
           <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10">
-            {/* text-blue-800 -> text-secondary | text-blue-600 -> text-primary */}
             <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-secondary">
               <Phone className="text-primary" /> WhatsApp
             </h3>
