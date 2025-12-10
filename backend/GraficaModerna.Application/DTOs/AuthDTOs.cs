@@ -1,10 +1,11 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using GraficaModerna.Application.Validators;
 
 namespace GraficaModerna.Application.DTOs;
 
 public record RegisterDto(
     [Required(ErrorMessage = "O nome completo é obrigatório")] string FullName,
-    [Required(ErrorMessage = "O email é obrigatório")][EmailAddress] string Email,
+    [Required(ErrorMessage = "O email é obrigatório")][StrictEmail] string Email,
     [Required(ErrorMessage = "A senha é obrigatória")][MinLength(6)] string Password,
     [Required(ErrorMessage = "A confirmação de senha é obrigatória")][property: Compare("Password")] string ConfirmPassword,
     [Required(ErrorMessage = "CPF/CNPJ é obrigatório")] string CpfCnpj,
@@ -16,7 +17,7 @@ public record LoginDto(
     [Required(ErrorMessage = "A senha é obrigatória")] string Password,
     bool IsAdminLogin = false
 );
-public record ForgotPasswordDto([Required][EmailAddress] string Email);
+public record ForgotPasswordDto([Required][StrictEmail] string Email);
 
 public record ResetPasswordDto(
     [Required][EmailAddress] string Email,

@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<ContentPage> ContentPages { get; set; }
     public DbSet<SiteSetting> SiteSettings { get; set; }
     public DbSet<OrderHistory> OrderHistories { get; set; }
+    public DbSet<ProcessedWebhookEvent> ProcessedWebhookEvents { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -88,6 +89,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Entity<SiteSetting>().HasKey(s => s.Key);
+
+        builder.Entity<ProcessedWebhookEvent>().HasKey(e => e.EventId);
     }
 
     private static OrderStatus ParseStatus(string status)

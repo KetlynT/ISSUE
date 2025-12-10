@@ -34,6 +34,10 @@ public class OrderService(
     private readonly UserManager<ApplicationUser> _userManager = userManager;
     private readonly ILogger<OrderService> _logger = logger;
 
+    // ... (Métodos CreateOrderFromCartAsync, GetUserOrdersAsync, GetAllOrdersAsync mantidos iguais) ...
+    // Vou omitir os métodos que não precisam de correção de log para economizar espaço,
+    // mas o arquivo completo deve conter tudo. Abaixo segue o método ConfirmPaymentViaWebhookAsync corrigido e estruturado.
+
     public async Task<OrderDto> CreateOrderFromCartAsync(string userId, CreateAddressDto addressDto, string? couponCode,
         string shippingMethod)
     {
@@ -604,7 +608,6 @@ public class OrderService(
     {
         try
         {
-            // Alterado para usar EnvHelper e garantir que a configuração existe
             var securityEmail = EnvHelper.Required("ADMIN_EMAIL");
 
             var subject = $"🚨 ALERTA DE SEGURANÇA CRÍTICO - Tentativa de Fraude";

@@ -62,7 +62,7 @@ public class CartService(IUnitOfWork uow, AppDbContext context, ILogger<CartServ
 
         for (var attempt = 1; attempt <= MaxConcurrencyRetries; attempt++)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
             try
             {
                 var product = await _context.Products
@@ -76,7 +76,25 @@ public class CartService(IUnitOfWork uow, AppDbContext context, ILogger<CartServ
                 if (product.StockQuantity < dto.Quantity)
                     throw new InvalidOperationException("Estoque insuficiente para a quantidade solicitada.");
 
-                var cart = await GetOrCreateCart(userId);
+                var cart = await _context.Carts
+                    .FromSqlRaw(@"
+                        SELECT * FROM ""Carts""
+                        WHERE ""UserId"" = {0}
+                        FOR UPDATE", userId)
+                    .Include(c => c.Items)
+                    .SingleOrDefaultAsync();
+
+                if (cart == null)
+                {
+                    cart = new Cart
+                    {
+                        UserId = userId,
+                        LastUpdated = DateTime.UtcNow
+                    };
+                    _context.Carts.Add(cart);
+                    await _context.SaveChangesAsync();
+                }
+
                 var existing = cart.Items.FirstOrDefault(i => i.ProductId == dto.ProductId);
 
                 if (existing != null)
@@ -107,7 +125,7 @@ public class CartService(IUnitOfWork uow, AppDbContext context, ILogger<CartServ
                 }
 
                 cart.LastUpdated = DateTime.UtcNow;
-                await _uow.CommitAsync();
+                await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 _logger.LogInformation(
@@ -156,10 +174,18 @@ public class CartService(IUnitOfWork uow, AppDbContext context, ILogger<CartServ
 
         for (var attempt = 1; attempt <= MaxConcurrencyRetries; attempt++)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+            using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
             try
             {
-                var cart = await GetOrCreateCart(userId);
+                var cart = await _context.Carts
+                    .FromSqlRaw(@"
+                        SELECT * FROM ""Carts""
+                        WHERE ""UserId"" = {0}
+                        FOR UPDATE", userId)
+                    .Include(c => c.Items)
+                    .SingleOrDefaultAsync()
+                    ?? throw new InvalidOperationException("Carrinho não encontrado.");
+
                 var item = cart.Items.FirstOrDefault(i => i.Id == cartItemId)
                     ?? throw new InvalidOperationException("Item não encontrado no carrinho.");
 
@@ -177,7 +203,7 @@ public class CartService(IUnitOfWork uow, AppDbContext context, ILogger<CartServ
                 item.Quantity = quantity;
                 cart.LastUpdated = DateTime.UtcNow;
 
-                await _uow.CommitAsync();
+                await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
                 return;
             }
