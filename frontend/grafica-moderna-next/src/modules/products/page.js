@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ProductService } from '../services/productService';
-import { ContentService } from '../services/contentService';
-import { useCart } from '../context/CartContext';
+import { ProductService } from '../../services/productService';
+import { ContentService } from '../../services/contentService';
+import { useCart } from '../../context/CartContext';
 import AuthService from '../services/authService';
 import { ShoppingCart, MessageSquare, Plus, Minus, Zap } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { ShippingCalculator } from '../components/ShippingCalculator';
+import { Button } from '../../components/ui/Button';
+import { ShippingCalculator } from '../../components/ShippingCalculator';
 
 export const ProductDetails = () => {
   const { id } = useParams();
