@@ -1,12 +1,16 @@
+'use client';
+
 import { createContext, useState, useEffect, useContext } from 'react';
 import authService from '../services/authService';
 import PropTypes from 'prop-types';
+import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     const checkLoginStatus = async () => {
@@ -46,7 +50,8 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await authService.logout();
-      window.location.href = '/';
+      router.push('/');
+      router.refresh();
     } catch (e) {
       console.error(e);
     } finally {

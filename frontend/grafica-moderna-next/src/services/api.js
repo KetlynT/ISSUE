@@ -1,7 +1,7 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://localhost:7255/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:7255/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -56,8 +56,9 @@ api.interceptors.response.use(
         return api(originalRequest);
 
       } catch (refreshError) {
-        processQueue(refreshError, null);
-        window.location.replace('/login');
+        if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

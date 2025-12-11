@@ -1,5 +1,7 @@
+'use client'
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard, Package } from 'lucide-react';
 import { ContentService } from '../../services/contentService';
 import { useCart } from '../../context/CartContext';
@@ -13,7 +15,7 @@ export const Header = () => {
   
   const { cartCount } = useCart();
   const { user, logout, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   
   const isAdmin = user?.role === 'Admin';
 

@@ -1,3 +1,4 @@
+'use client'
 import { useEffect, useState } from 'react';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
@@ -7,7 +8,7 @@ import { Search, Printer, ChevronLeft, ChevronRight, Filter } from 'lucide-react
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
-export const Home = () => {
+export default function Home () {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalItems: 0 });

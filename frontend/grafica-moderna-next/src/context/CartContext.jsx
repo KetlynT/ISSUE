@@ -1,3 +1,5 @@
+'use client'
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { CartService } from '../services/cartService';
 import { useAuth } from './AuthContext';
