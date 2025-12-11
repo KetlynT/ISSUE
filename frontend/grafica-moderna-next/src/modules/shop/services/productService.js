@@ -1,4 +1,4 @@
-import api from '../modules/api/api';
+import api from '../lib/api';
 
 export const ProductService = {
   getAll: async (page = 1, pageSize = 8, search = '', sort = '', order = '') => {

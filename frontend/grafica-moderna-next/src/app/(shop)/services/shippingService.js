@@ -1,4 +1,4 @@
-import api from '../../api/api';
+import api from '../../../services/api';
 
 export const ShippingService = {
   calculate: async (cep, items) => {

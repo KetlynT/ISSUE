@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
+import authService from '../../../services/authService';
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
 
 export const ConfirmEmail = () => {

@@ -2,14 +2,14 @@
 import { useEffect, useState } from 'react';
 import { ProductService } from '../services/productService';
 import { ContentService } from '../services/contentService';
-import { ProductCard } from '../modules/(shop)/produto/components/ProductCard';
+import { ProductCard } from './(shop)/produto/components/ProductCard';
 import { Button } from '../components/ui/Button';
 import { Search, Printer, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 
 export default function Home () {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [products, setProducts] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, totalItems: 0 });
   const [loading, setLoading] = useState(true);
