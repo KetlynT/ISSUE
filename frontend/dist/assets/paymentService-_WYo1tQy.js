@@ -1,1 +1,0 @@
-import{h as e}from"./index-rlvyAQjv.js";const n={createCheckoutSession:async s=>(await e.post(`/payments/checkout-session/${s}`)).data,getPaymentStatus:async s=>(await e.get(`/payments/status/${s}`)).data};export{n as P};
