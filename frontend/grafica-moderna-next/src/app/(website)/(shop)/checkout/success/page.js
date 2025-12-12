@@ -1,9 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, Package, ArrowRight, AlertTriangle, Loader } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Button } from '../../../../components/ui/Button';
 import { PaymentService } from '../../../../services/paymentService';
-import confetti from 'canvas-confetti';
 
 export const Success = () => {
   const [searchParams] = useSearchParams();

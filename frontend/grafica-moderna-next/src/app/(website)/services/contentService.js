@@ -1,4 +1,4 @@
-import api from './api';
+import api from '@/app/(website)/services/api';
 
 export const ContentService = {
   getPage: async (slug) => {

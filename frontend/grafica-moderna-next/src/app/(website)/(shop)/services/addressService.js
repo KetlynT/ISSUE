@@ -1,4 +1,4 @@
-import api from '../modules/api/api';
+import api from '@/app/(website)/services/api';
 
 export const AddressService = {
   getAll: async () => {

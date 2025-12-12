@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ContentService } from '../services/contentService';
 import { motion } from 'framer-motion';
 import DOMPurify from 'dompurify';
+import { ContentService } from '@/app/(website)/services/contentService';
 
 export const GenericPage = () => {
   const { slug } = useParams();

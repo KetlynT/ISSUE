@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '../../context/AuthContext';
-import { useCart } from '../../context/CartContext';
-import { LogIn, AlertTriangle } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/app/(website)/context/AuthContext';
+import { useCart } from '@/app/(website)/context/CartContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -32,7 +32,7 @@ export default function Login() {
       
       await syncGuestCart();
       
-      const from = location.state?.from?.pathname || '/';
+      const from = link.state?.from?.pathname || '/';
       router.replace(from);
       
     } catch (err) {
@@ -92,7 +92,7 @@ export default function Login() {
                 </Link>
             </p>
             <div>
-                <a href="/" className="text-xs text-gray-400 hover:text-gray-600">← Voltar para a loja</a>
+                <Link href="/" className="text-xs text-gray-400 hover:text-gray-600">← Voltar para a loja</a>
             </div>
         </div>
       </div>

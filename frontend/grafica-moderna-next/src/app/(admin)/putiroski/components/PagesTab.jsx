@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
-import { ContentService } from '../../services/contentService';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { InputGroup } from '../ui/InputGroup';
+import { Button } from '@/app/(website)/components/ui/Button';
+import { ContentService } from '@/app/(website)/services/contentService';
+import { InputGroup } from '@/app/(website)/components/ui/InputGroup';
 
 const PagesTab = () => {
     const [pages, setPages] = useState([]);

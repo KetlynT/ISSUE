@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { DashboardService } from '../../services/dashboardService';
-import { ProductService } from '../../services/productService';
-import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
 import { Search, Eye, X, Settings, RefreshCcw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DashboardService } from '@/app/(admin)/putiroski/services/dashboardService';
+import { ProductService } from '@/app/(website)/(shop)/services/productService';
+import { Button } from '@/app/(website)/components/ui/Button';
 
 const OrdersTab = () => {
     const [orders, setOrders] = useState([]);

@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
-import { ContentService } from '../services/contentService';
 import toast from 'react-hot-toast';
 import { LogOut, Package, Settings, FileText, Truck, BarChart2, Tag } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import 'react-quill/dist/quill.snow.css';
-import { useAuth } from '../context/AuthContext';
-import OverviewTab from '../components/admin/OverviewTab';
-import ProductsTab from '../components/admin/ProductsTab';
-import OrdersTab from '../components/admin/OrdersTab';
-import CouponsTab from '../components/admin/CouponsTab';
-import SettingsTab from '../components/admin/SettingsTab';
-import PagesTab from '../components/admin/PagesTab';
+import { useAuth } from '@/app/(website)/context/AuthContext';
+import { ContentService } from '@/app/(website)/services/contentService';
+import OverviewTab from '@/app/(admin)/putiroski/components/OverviewTab';
+import ProductsTab from '@/app/(admin)/putiroski/components/ProductsTab';
+import OrdersTab from '@/app/(admin)/putiroski/components/OrdersTab';
+import CouponsTab from '@/app/(admin)/putiroski/components/CouponsTab';
+import SettingsTab from '@/app/(admin)/putiroski/components/SettingsTab';
+import PagesTab from '@/app/(admin)/putiroski/components/PagesTab';
 
 export const AdminDashboard = () => {
   const [logoUrl, setLogoUrl] = useState('');
   const { user, loading: authLoading, logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview'); 
   const [isAuthorized, setIsAuthorized] = useState(false);
   
@@ -24,7 +24,7 @@ export const AdminDashboard = () => {
 
     if (!user || user.role !== 'Admin') {
       toast.error("Acesso não autorizado.");
-      navigate('/', { replace: true });
+      router.replace('/', { replace: true });
       return;
     }
 

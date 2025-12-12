@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/app/(website)/context/AuthContext';
 import { Lock, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
-import '../../globals.css';
+import '@/app/globals.css';
+import { useAuth } from '@/app/(website)/context/AuthContext';
 
 export default function AdminLogin () {
   const [formData, setFormData] = useState({ email: '', password: '' });

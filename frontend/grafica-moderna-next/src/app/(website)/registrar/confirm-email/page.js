@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import authService from '../../../services/authService';
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
+import authService from '@/app/(website)/login/services/authService';
 
 export const ConfirmEmail = () => {
   const [searchParams] = useSearchParams();

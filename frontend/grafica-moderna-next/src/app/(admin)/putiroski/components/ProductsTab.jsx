@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ProductService } from '../../services/productService';
-import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
-import { Search, ArrowUpDown, Edit, Trash2 } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown, ArrowUpDown, Edit, Trash2, Box } from 'lucide-react';
+import { ProductService } from '@/app/(website)/(shop)/services/productService';
+import { Button } from '@/app/(website)/components/ui/Button';
 
 const ProductsTab = () => {
   const [products, setProducts] = useState([]);

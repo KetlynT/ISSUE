@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { ContentService } from '../services/contentService';
 import { usePathname } from 'next/navigation';
+import { ContentService } from '@/app/(website)/services/contentService';
 
 export const WhatsAppButton = () => {
   const [number, setNumber] = useState('');

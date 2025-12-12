@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { CartService } from '../services/cartService';
-import { AddressService } from '../services/addressService';
-import { ShippingService } from '../services/shippingService';
-import { PaymentService } from '../services/paymentService';
-import { useCart } from '../context/CartContext';
-import { Button } from '../components/ui/Button';
-import { AddressManager } from '../components/AddressManager';
-import { CouponInput } from '../components/CouponInput';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { MapPin, Truck, CheckCircle, Settings, Plus, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+import { CartService } from '@/app/(website)/(shop)/services/cartService';
+import { AddressService } from '@/app/(website)/(shop)/services/addressService';
+import { ShippingService } from '@/app/(website)/(shop)/services/shippingService';
+import { PaymentService } from '@/app/(website)/(shop)/services/paymentService';
+import { useCart } from '@/app/(website)/context/CartContext';
+import { Button } from '@/app/(website)/components/ui/Button';
+import { AddressManager } from '@/app/(website)/(shop)/components/AddressManager';
+import { CouponInput } from '@/app/(website)/(shop)/carrinho/components/CouponInput';
 
 export const Checkout = () => {
   const [addresses, setAddresses] = useState([]);
@@ -22,9 +24,9 @@ export const Checkout = () => {
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const { cartItems, refreshCart } = useCart();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [coupon, setCoupon] = useState(location.state?.coupon || null);
+  const router = useRouter();
+  const link = useLink();
+  const [coupon, setCoupon] = useState(router.state?.coupon || null);
 
   useEffect(() => {
     if (!loadingData && cartItems.length === 0) {
@@ -69,7 +71,7 @@ export const Checkout = () => {
       toast.loading("Redirecionando para pagamento...", { id: toastId });
       const { url } = await PaymentService.createCheckoutSession(order.id);
       await refreshCart();
-      window.location.href = url;
+      window.router.href = url;
     } catch (error) {
       toast.error(error.response?.data?.message || "Erro ao processar.", { id: toastId });
       setIsRedirecting(false);

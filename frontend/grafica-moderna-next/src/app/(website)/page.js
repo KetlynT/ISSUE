@@ -2,13 +2,13 @@
 
 import '../globals.css';
 import { useEffect, useState } from 'react';
-import { ProductService } from '@/app/(website)/(shop)/services/productService';
-import { ContentService } from '@/app/(website)/services/contentService';
-import { ProductCard } from '@/app/(website)/components/ProductCard';
-import { Button } from './components/ui/Button';
 import { Search, Printer, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { ProductService } from '@/app/(website)/(shop)/services/productService';
+import { ContentService } from '@/app/(website)/services/contentService';
+import { ProductCard } from '@/app/(website)/components/ProductCard';
+import { Button } from '@/app/(website)/components/ui/Button';
 
 export default function Home () {
   const router = useRouter();

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { OrderService } from '../services/orderService';
-import { PaymentService } from '../services/paymentService'; 
 import { Package, Calendar, MapPin, ChevronDown, ChevronUp, CreditCard, Truck, RefreshCcw, AlertTriangle, Clock, Box, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '../components/ui/Button';
 import toast from 'react-hot-toast';
-import RefundRequestModal from '../components/RefundRequestModal';
+import { OrderService } from '@/app/(website)/(shop)/services/orderService';
+import { PaymentService } from '@/app/(website)/(shop)/services/paymentService'; 
+import { Button } from '@/app/(website)/components/ui/Button';
+import RefundRequestModal from '@/app/(website)/perfil/components/RefundRequestModal';
 
 export const MyOrders = () => {
   const [orders, setOrders] = useState([]);

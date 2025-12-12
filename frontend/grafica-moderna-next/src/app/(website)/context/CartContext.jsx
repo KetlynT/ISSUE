@@ -1,9 +1,9 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { CartService } from '@/app/(website)/(shop)/services/cartService';
-import { useAuth } from '@/app/(website)/context/AuthContext';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/app/(website)/context/AuthContext';
+import { CartService } from '@/app/(website)/(shop)/services/cartService';
 
 const CartContext = createContext({});
 
@@ -34,6 +34,10 @@ export const CartProvider = ({ children }) => {
     fetchCart();
   }, [user]);
 
+  const syncGuestCart = async () => {
+      await fetchCart();
+  };
+
   const addToCart = async (product, quantity) => {
     if (!user) {
         toast.error("Você precisa fazer login para adicionar itens ao carrinho.");
@@ -58,7 +62,7 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const removeItem = async (itemId) => {
+  const removeFromCart = async (itemId) => {
     try {
       await CartService.removeItem(itemId);
       toast.success('Item removido!');
@@ -77,15 +81,22 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const cartItems = cart?.items || [];
+  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+
   return (
     <CartContext.Provider value={{ 
         cart, 
+        cartItems,
+        cartCount,
         loading, 
         addToCart, 
         updateQuantity, 
-        removeItem, 
+        removeFromCart,
+        removeItem: removeFromCart,
         clearCart,
-        refreshCart: fetchCart 
+        refreshCart: fetchCart,
+        syncGuestCart
     }}>
       {children}
     </CartContext.Provider>

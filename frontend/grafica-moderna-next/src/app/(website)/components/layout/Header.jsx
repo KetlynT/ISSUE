@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MessageSquare, ShoppingCart, User, LogOut, LayoutDashboard, Package } from 'lucide-react';
-import { ContentService } from '../../services/contentService';
-import { useCart } from '../../context/CartContext';
-import { useAuth } from '../../context/AuthContext'; 
+import { ContentService } from '@/app/(website)/services/contentService';
+import { useCart } from '@/app/(website)/context/CartContext';
+import { useAuth } from '@/app/(website)/context/AuthContext';
 
 export const Header = () => {
   const [logoUrl, setLogoUrl] = useState('');

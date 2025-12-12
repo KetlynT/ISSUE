@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ProductService } from '../../services/productService';
-import { Button } from '../../components/ui/Button';
 import toast from 'react-hot-toast';
-import { ContentService } from '../../services/contentService';
-import { InputGroup } from '../ui/InputGroup';
+import { ProductService } from '@/app/(website)/(shop)/services/productService';
+import { Button } from '@/app/(website)/components/ui/Button';
+import { ContentService } from '@/app/(website)/services/contentService';
+import { InputGroup } from '@/app/(website)/components/ui/InputGroup';
 
 const SettingsTab = () => {
     const [formData, setFormData] = useState({});
@@ -105,7 +105,7 @@ const SettingsTab = () => {
             <div className="space-y-4">
                 <h3 className="font-bold text-lg text-gray-800 border-b pb-2">Rodapé</h3>
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Texto "Sobre a Empresa"</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Texto &quot;Sobre a Empresa&quot;</label>
                     <textarea 
                         name="footer_about" 
                         value={formData.footer_about || ''} 
