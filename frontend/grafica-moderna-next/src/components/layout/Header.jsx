@@ -40,14 +40,14 @@ export const Header = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/', { replace: true });
+    router.replace('/', { replace: true });
   };
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         
-        <Link to="/" className="flex items-center gap-2 group">
+        <Link href="/" className="flex items-center gap-2 group">
           {settingsLoading ? (
             <div className="animate-pulse flex items-center gap-2">
                 <div className="w-10 h-10 bg-gray-200 rounded-xl"></div>
@@ -73,14 +73,14 @@ export const Header = () => {
           {settingsLoading ? (
              <div className="animate-pulse h-4 w-24 bg-gray-200 rounded hidden md:block"></div>
           ) : (
-             <Link to="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-primary transition-colors font-medium">
+             <Link href="/contato" className="hidden md:flex items-center gap-2 text-gray-500 hover:text-primary transition-colors font-medium">
                 <MessageSquare size={20} />
                 <span className="hidden lg:inline">Fale Conosco</span>
              </Link>
           )}
 
           {!isAdmin && !settingsLoading && purchaseEnabled && (
-            <Link to="/carrinho" className="relative group p-2">
+            <Link href="/carrinho" className="relative group p-2">
                 <ShoppingCart size={24} className="text-gray-600 group-hover:text-primary transition-colors" />
                 {cartCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm animate-bounce">
@@ -103,10 +103,10 @@ export const Header = () => {
                         </Link>
                     ) : (
                         <>
-                            <Link to="/meus-pedidos" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary" title="Meus Pedidos">
+                            <Link href="/meus-pedidos" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary" title="Meus Pedidos">
                                 <Package size={20} />
                             </Link>
-                            <Link to="/perfil" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary" title="Meu Perfil">
+                            <Link href="/perfil" className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-primary" title="Meu Perfil">
                                 <User size={20} />
                             </Link>
                         </>
@@ -118,7 +118,7 @@ export const Header = () => {
                 </div>
             ) : (
                 purchaseEnabled && (
-                    <Link to="/login" className="flex items-center gap-2 text-sm font-bold text-primary hover:brightness-75 border border-gray-200 bg-gray-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
+                    <Link href="/login" className="flex items-center gap-2 text-sm font-bold text-primary hover:brightness-75 border border-gray-200 bg-gray-50 px-4 py-2 rounded-full transition-all hover:shadow-md">
                         <User size={18} /> Entrar
                     </Link>
                 )

@@ -1,8 +1,10 @@
 'use client'
+
+import './globals.css';
 import { useEffect, useState } from 'react';
 import { ProductService } from '@/app/(shop)/services/productService';
 import { ContentService } from '@/services/contentService';
-import { ProductCard } from '@/app/(shop)/produto/components/ProductCard';
+import { ProductCard } from '@/components/ProductCard';
 import { Button } from '../components/ui/Button';
 import { Search, Printer, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -64,7 +66,7 @@ export default function Home () {
       setInputPage(data.page); 
     } catch (error) {
       console.error("Erro ao carregar catálogo:", error);
-      navigate('/error', { replace: true });
+      router.replace('/error');
     } finally {
       setLoading(false);
       setIsFirstLoad(false); 
@@ -92,8 +94,7 @@ export default function Home () {
   };
 
   return (
-    <html>
-      <body>
+    <>
       <div className="relative bg-secondary text-white overflow-hidden transition-all duration-500">
         <div 
             className="absolute inset-0 bg-cover bg-center opacity-20 transform scale-105"
@@ -137,7 +138,7 @@ export default function Home () {
           </div>
           
           <div className="w-full lg:w-auto flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-grow sm:w-80">
+            <div className="relative grow sm:w-80">
               <input 
                 type="text" 
                 placeholder="Buscar produto..." 
@@ -232,7 +233,6 @@ export default function Home () {
           </div>
         )}
       </section>
-      </body>
-    </html>
+    </>
   );
 };

@@ -1,9 +1,11 @@
+'use client'
+
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { UserPlus, User, Mail, Lock, Phone, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { maskCpfCnpj, maskPhone, cleanString, validateDocument } from '../utils/formatters';
+import { maskCpfCnpj, maskPhone, cleanString, validateDocument } from '@/utils/formatters';
 
 export const Register = () => {
   const [formData, setFormData] = useState({
@@ -15,7 +17,7 @@ export const Register = () => {
     phoneNumber: ''
   });
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const router = useRouter();
   const { register } = useAuth();
 
   const handleChange = (e) => {
@@ -64,7 +66,7 @@ export const Register = () => {
         password: formData.password
       });
       toast.success("Conta criada com sucesso!");
-      navigate('/', { replace: true }); 
+      router.replace('/'); 
     } catch (err) {
       console.error(err);
       const msg = err.response?.data?.message || "Erro ao criar conta. Verifique os dados.";
@@ -194,7 +196,7 @@ export const Register = () => {
         <div className="mt-6 text-center pt-6 border-t border-gray-100">
             <p className="text-sm text-gray-600">
                 Já tem uma conta?{' '}
-                <Link to="/login" className="text-primary font-bold hover:underline">
+                <Link href="/login" className="text-primary font-bold hover:underline">
                     Fazer Login
                 </Link>
             </p>

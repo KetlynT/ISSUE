@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { ContentService } from '../services/contentService';
+import { usePathname } from 'next/navigation';
 
 export const WhatsAppButton = () => {
   const [number, setNumber] = useState('');
   const [isVisible, setIsVisible] = useState(false);
-  const location = useLocation();
+  const pathname = usePathname();
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -24,9 +24,8 @@ export const WhatsAppButton = () => {
     loadSettings();
   }, []);
 
-  const isBlockedRoute = ['/login', '/putiroski', '/cadastro', '/esqueci-senha', '/reset-password', '/confirm-email'].some(path => 
-    location.pathname.startsWith(path)
-  );
+  const isBlockedRoute = ['/login', '/putiroski', '/cadastro', '/esqueci-senha', '/reset-password', '/confirm-email'].some(
+    path => pathname.startsWith(path));
 
   if (!isVisible || !number || isBlockedRoute) return null;
 

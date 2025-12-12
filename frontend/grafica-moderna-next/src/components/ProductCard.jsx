@@ -65,14 +65,14 @@ export const ProductCard = ({ product, purchaseEnabled = true }) => {
         </div>
       </div>
 
-      <div className="p-6 flex flex-col flex-grow">
+      <div className="p-6 flex flex-col grow">
         <div className="flex justify-between items-start mb-2">
             <h3 className="text-lg font-bold text-gray-800 line-clamp-1 group-hover:text-primary transition-colors">
                 <Link to={`/produto/${product.id}`}>{product.name}</Link>
             </h3>
         </div>
         
-        <p className="text-gray-500 text-sm mb-4 line-clamp-2 flex-grow">
+        <p className="text-gray-500 text-sm mb-4 line-clamp-2 grow">
           {product.description}
         </p>
         

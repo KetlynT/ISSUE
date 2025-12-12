@@ -132,7 +132,7 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
         {addresses.map(addr => (
           <div key={addr.id} className={`bg-white p-4 rounded-lg border transition-all ${addr.isDefault ? 'border-primary/50 bg-primary/5' : 'border-gray-200'}`}>
             <div className="flex justify-between items-start">
-              <div className="cursor-pointer flex-grow" onClick={() => allowSelection && onSelect && onSelect(addr)}>
+              <div className="cursor-pointer grow" onClick={() => allowSelection && onSelect && onSelect(addr)}>
                 <div className="flex items-center gap-2 mb-1">
                     <span className="font-bold text-gray-800">{addr.name}</span>
                     {addr.isDefault && <span className="bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1"><Star size={10} fill="currentColor"/> Padrão</span>}
@@ -157,7 +157,7 @@ export const AddressManager = ({ onUpdate, allowSelection = false, onSelect }) =
       </div>
 
       {isFormOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-60 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
             <div className="p-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
               <h3 className="font-bold text-gray-800">{editingAddress ? 'Editar' : 'Novo'} Endereço</h3>

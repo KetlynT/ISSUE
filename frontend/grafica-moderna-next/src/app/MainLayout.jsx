@@ -1,6 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { Header } from './Header';
-import { Footer } from '@./Footer';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
 import { WhatsAppButton } from '../WhatsAppButton';
 import { AnimatePresence, motion } from 'framer-motion';
 import './globals.css'
@@ -12,7 +12,7 @@ export const MainLayout = () => {
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
 
-      <main className="flex-grow">
+      <main className="grow">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

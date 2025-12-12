@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ContentService } from '../../services/contentService';
+import { ContentService } from '@/services/contentService';
 import { Phone, Mail, MapPin } from 'lucide-react';
 
 export const Footer = () => {
@@ -59,15 +59,15 @@ export const Footer = () => {
              </div>
           ) : (
             <ul className="space-y-3 text-sm">
-                <li><Link to="/" className="hover:text-primary transition-colors">Início</Link></li>
+                <li><Link href="/" className="hover:text-primary transition-colors">Início</Link></li>
                 {pages.map(page => (
                 <li key={page.id}>
-                    <Link to={`/pagina/${page.slug}`} className="hover:text-primary transition-colors">
+                    <Link href={`/pagina/${page.slug}`} className="hover:text-primary transition-colors">
                         {page.title}
                     </Link>
                 </li>
                 ))}
-                <li><Link to="/contato" className="hover:text-primary transition-colors">Contato</Link></li>
+                <li><Link href="/contato" className="hover:text-primary transition-colors">Contato</Link></li>
             </ul>
           )}
         </div>
